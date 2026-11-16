@@ -13,6 +13,9 @@ pub struct Glyphs {
     pub wagon: char,
     pub smoke: [char; 3],
     pub gauge_full: char,
+    /// Étoiles de compétence des équipages.
+    pub star: char,
+    pub star_empty: char,
     pub gauge_empty: char,
     pub sep: &'static str,
     pub arrow: &'static str,
@@ -45,6 +48,8 @@ impl Glyphs {
                 wagon: '#',
                 smoke: ['.', 'o', 'O'],
                 gauge_full: '#',
+                star: '*',
+                star_empty: '.',
                 gauge_empty: '-',
                 sep: "|",
                 arrow: "->",
@@ -63,6 +68,8 @@ impl Glyphs {
                 wagon: '■',
                 smoke: ['·', '∘', '○'],
                 gauge_full: '█',
+                star: '★',
+                star_empty: '☆',
                 gauge_empty: '░',
                 sep: "│",
                 arrow: "→",
@@ -106,6 +113,8 @@ mod tests {
             g.wagon,
             g.gauge_full,
             g.gauge_empty,
+            g.star,
+            g.star_empty,
         ]);
         for s in [g.sep, g.arrow, g.cursor, g.check, g.bullet, g.dash] {
             all.push_str(s);

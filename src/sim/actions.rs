@@ -48,6 +48,7 @@ pub enum ActionError {
     AlreadyOwned,
     UnknownStaff,
     UnknownBonus,
+    UnknownCrew,
     /// Recettes insuffisantes, ou époque trop précoce, pour nationaliser.
     PrestigeNotReady,
     NotEnoughPoints {
@@ -95,6 +96,7 @@ impl fmt::Display for ActionError {
             ActionError::AlreadyOwned => write!(f, "Déjà acquis"),
             ActionError::UnknownStaff => write!(f, "Service inconnu"),
             ActionError::UnknownBonus => write!(f, "Bonus inconnu"),
+            ActionError::UnknownCrew => write!(f, "Équipier inconnu"),
             ActionError::PrestigeNotReady => {
                 write!(
                     f,
@@ -242,6 +244,7 @@ impl World {
         }
         let refund = self.resale_value(data, train_id).unwrap_or(0.0);
         let train = self.trains.remove(index);
+        self.sync_crew();
         if let Some(station) = data
             .line(&train.line)
             .and_then(|line| self.stations.get_mut(train.dir.origin(line)))

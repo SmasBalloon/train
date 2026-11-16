@@ -382,6 +382,25 @@ impl GameData {
                 bail!("{what} : il faut cost >= 1, max_level >= 1 et cost_growth >= 1");
             }
         }
+        let c = &self.crew;
+        non_negative("crew : base_wage", c.base_wage)?;
+        non_negative("crew : skill_wage", c.skill_wage)?;
+        non_negative("crew : hire_fee_hours", c.hire_fee_hours)?;
+        non_negative("crew : xp_per_km", c.xp_per_km)?;
+        let e = &c.effects;
+        for (name, v) in [
+            ("driving_accel", e.driving_accel),
+            ("service_comfort", e.service_comfort),
+            ("control_revenue", e.control_revenue),
+            ("boarding_speed", e.boarding_speed),
+        ] {
+            non_negative(&format!("crew : effects.{name}"), v)?;
+        }
+        ratio("crew : effects.economy_fuel", e.economy_fuel)?;
+        ratio("crew : effects.care_wear", e.care_wear)?;
+        if c.names.first.is_empty() || c.names.last.is_empty() {
+            bail!("crew : il faut au moins un prénom et un nom dans [names]");
+        }
         let b = &self.balance;
         self.era_rank("balance : prestige_min_era", &b.prestige_min_era)?;
         positive("balance : prestige_base", b.prestige_base)?;

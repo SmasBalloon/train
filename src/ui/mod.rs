@@ -9,6 +9,7 @@ mod glyphs;
 mod map;
 mod popups;
 mod theme;
+mod tree;
 
 use std::io::stdout;
 use std::path::Path;
@@ -229,7 +230,9 @@ mod tests {
             text.contains("| L 4") && text.contains("Locomotion no1 #1"),
             "{text}"
         );
-        for popup in ['a', 'r', 't', 'e', 'u', 'c', 'v', 'n', 'g', 'o', '?', 'b'] {
+        for popup in [
+            'a', 'r', 't', 'e', 'u', 'c', 'v', 'n', 'g', 'o', 's', '?', 'b',
+        ] {
             press(&mut app, KeyCode::Char(popup));
             let text = screen(&mut app, 120, 40);
             assert!(text.is_ascii(), "fenêtre {popup} : {text}");
@@ -297,7 +300,23 @@ mod tests {
             app.world.research_active.as_ref().map(|a| a.id.as_str()),
             Some("hand_signals")
         );
-        assert!(screen(&mut app, 120, 40).contains("Signaleurs de voie 0 %"));
+        // Le lancement se voit aussitôt : dans l'arbre, dans la case, et dans le bandeau du haut.
+        let text = screen(&mut app, 120, 40);
+        assert!(
+            text.contains("En cours : Signaleurs de voie") && text.contains("encore 2 min"),
+            "{text}"
+        );
+        assert!(text.contains("Signaleurs de voie  0%]"), "{text}");
+        press(&mut app, KeyCode::Esc);
+        let top = screen(&mut app, 120, 40)
+            .lines()
+            .next()
+            .unwrap()
+            .to_string();
+        assert!(
+            top.contains("Signaleurs de voie") && top.trim_end().ends_with("2 min"),
+            "{top}"
+        );
     }
 
     fn enter(app: &mut App, era: &str) {
@@ -402,6 +421,78 @@ mod tests {
         app.open(app::Popup::Network { sel: stockton });
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.line_id(), "stockton_darlington");
+    }
+
+    #[test]
+    fn crew_popup_recruits_and_assigns() {
+        let mut app = app(false, ColorMode::Color);
+        app.update(0.1);
+        press(&mut app, KeyCode::Char('s'));
+        // Personne n'est encore employé : la fenêtre s'ouvre sur le recrutement.
+        assert_eq!(
+            app.popup,
+            app::Popup::Crew {
+                sel: 0,
+                recruiting: true
+            }
+        );
+        let text = screen(&mut app, 130, 44);
+        for expected in [
+            "Recrutement 4",
+            "Conducteur",
+            "Contrôleur",
+            "Conduite",
+            "Douceur",
+            "prime £",
+            "★",
+        ] {
+            assert!(
+                text.contains(expected),
+                "« {expected} » absent de :\n{text}"
+            );
+        }
+        press(&mut app, KeyCode::Enter);
+        assert!(screen(&mut app, 130, 44).contains("Pas assez d'argent"));
+
+        app.world.money = 5000.0;
+        let driver = app.world.candidates[0].name.clone();
+        press(&mut app, KeyCode::Enter);
+        assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 3));
+        // Le suivant de la liste est un contrôleur.
+        assert_eq!(
+            app.world.candidates[0].role,
+            crate::sim::CrewRole::Conductor
+        );
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.crew.len(), 2);
+
+        // Onglet des employés : Entrée affecte au train sélectionné, une seconde fois renvoie en réserve.
+        press(&mut app, KeyCode::Tab);
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("Employés 2") && text.contains("en réserve") && text.contains(&driver),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Enter);
+        assert!(app.world.crew.iter().all(|m| m.train == Some(1)));
+        assert!(
+            app.world.trains[0].crew.driving() > 0.0 && app.world.trains[0].crew.service() > 0.0
+        );
+        assert!(screen(&mut app, 130, 44).contains("Locomotion n°1 #1"));
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.crew[1].train, None);
+
+        // Licencier, puis vérifier le rappel de l'équipage sur la carte.
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.world.crew.len(), 1);
+        press(&mut app, KeyCode::Esc);
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains(&format!("Équipage : {driver}")) && text.contains("contrôleur ordinaire"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -561,9 +652,127 @@ mod tests {
     }
 
     #[test]
+    fn research_tree_shows_who_needs_what() {
+        let mut app = app(false, ColorMode::Color);
+        press(&mut app, KeyCode::Char('r'));
+        // Par défaut, l'arbre est vertical : les époques descendent, les branches sont en colonnes.
+        assert!(app.tree_vertical);
+        let text = screen(&mut app, 160, 44);
+        for expected in [
+            "Pionniers",
+            "1825-1850",
+            "Signalisation",
+            "Confort",
+            "Signaleurs de voie",
+            "▼",
+        ] {
+            assert!(
+                text.contains(expected),
+                "« {expected} » absent de :\n{text}"
+            );
+        }
+        let line_of =
+            |text: &str, needle: &str| text.lines().position(|l| l.contains(needle)).unwrap();
+        assert!(line_of(&text, "Signaleurs de voie") < line_of(&text, "Télégraphe électrique"));
+        let telegraph = app
+            .data
+            .research
+            .iter()
+            .position(|r| r.id == "electric_telegraph")
+            .unwrap();
+        press(&mut app, KeyCode::Down);
+        assert_eq!(app.popup, app::Popup::Tree { sel: telegraph });
+        press(&mut app, KeyCode::Up);
+        assert_eq!(app.popup, app::Popup::Tree { sel: 0 });
+
+        // Tab le fait pivoter : époques de gauche à droite.
+        press(&mut app, KeyCode::Tab);
+        assert!(!app.tree_vertical);
+        assert_eq!(app.popup, app::Popup::Tree { sel: 0 });
+        let text = screen(&mut app, 160, 44);
+        for expected in [
+            "Pionniers (1825-1850)",
+            "Âge d'or de la vapeur",
+            "Traction",
+            "Signalisation",
+            "Confort",
+            "Signaleurs de voie",
+            "Télégraphe électrique",
+            "Chaudière multitubula…",
+        ] {
+            assert!(
+                text.contains(expected),
+                "« {expected} » absent de :\n{text}"
+            );
+        }
+        // Un trait relie les signaleurs au télégraphe, sur la même ligne, flèche à l'arrivée.
+        let row = text
+            .lines()
+            .find(|l| l.contains("Signaleurs de voie") && l.contains("Télégraphe"))
+            .unwrap();
+        let between = &row[row.find("Signaleurs").unwrap()..row.find("Télégraphe").unwrap()];
+        assert!(between.contains("─") && between.contains("▶"), "{row}");
+
+        // Les flèches suivent l'arbre ; la fiche du bas suit la sélection.
+        press(&mut app, KeyCode::Right);
+        let telegraph = app
+            .data
+            .research
+            .iter()
+            .position(|r| r.id == "electric_telegraph")
+            .unwrap();
+        assert_eq!(app.popup, app::Popup::Tree { sel: telegraph });
+        let text = screen(&mut app, 160, 44);
+        assert!(
+            text.contains("Cooke et Wheatstone") && text.contains("Prérequis : Signaleurs de voie"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        assert!(
+            screen(&mut app, 160, 44).contains("Il faut d'abord rechercher : Signaleurs de voie")
+        );
+
+        // On peut lancer une recherche depuis l'arbre, et tout parcourir sans erreur de rendu.
+        press(&mut app, KeyCode::Left);
+        app.world.money = 600.0;
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(
+            app.world.research_active.as_ref().map(|a| a.id.as_str()),
+            Some("hand_signals")
+        );
+        for size in [(160, 44), (80, 24), (30, 8)] {
+            for key in [
+                KeyCode::Right,
+                KeyCode::Down,
+                KeyCode::Right,
+                KeyCode::Up,
+                KeyCode::Right,
+                KeyCode::Down,
+            ] {
+                for _ in 0..8 {
+                    press(&mut app, key);
+                    screen(&mut app, size.0, size.1);
+                }
+            }
+        }
+
+        // v bascule vers la liste, sur la même recherche, et retour.
+        let app::Popup::Tree { sel } = app.popup else {
+            panic!("{:?}", app.popup)
+        };
+        press(&mut app, KeyCode::Char('v'));
+        assert!(matches!(app.popup, app::Popup::Research { .. }));
+        press(&mut app, KeyCode::Char('v'));
+        assert_eq!(app.popup, app::Popup::Tree { sel });
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.popup, app::Popup::None);
+    }
+
+    #[test]
     fn research_tree_filters_by_branch_and_scrolls() {
         let mut app = app(false, ColorMode::Color);
         press(&mut app, KeyCode::Char('r'));
+        press(&mut app, KeyCode::Char('v'));
         let text = screen(&mut app, 120, 40);
         assert!(
             text.contains("Toutes 0/52") && text.contains("Signaleurs de voie"),
@@ -950,38 +1159,15 @@ mod tests {
     fn preview() {
         let mut app = app(false, ColorMode::Color);
         app.data.events.clear();
-        enter(&mut app, "steam");
-        app.world
-            .research_done
-            .extend(["hand_signals", "water_troughs"].map(String::from));
-        app.world.money = 5e6;
-        let data = app.data.clone();
-        for country in ["france", "germany"] {
-            app.world.buy_concession(&data, country).unwrap();
-        }
-        for line in [
-            "darlington_york",
-            "york_leeds",
-            "york_london",
-            "paris_lille",
-            "paris_lyon",
-            "lille_cologne",
-        ] {
-            app.world.build_line(&data, line).unwrap();
-            for _ in 0..2 {
-                app.world.buy_locomotive(&data, "crampton", line).unwrap();
-            }
-        }
-        app.world.buy_fuel(&data, "coal", 50).unwrap();
-        for _ in 0..400 {
-            app.update(0.25);
-        }
-        press(&mut app, KeyCode::Char('3'));
-        println!("{}\n", screen(&mut app, 130, 44));
-        press(&mut app, KeyCode::Char('2'));
-        println!("{}\n", screen(&mut app, 130, 44));
-        press(&mut app, KeyCode::Char('n'));
-        println!("{}", screen(&mut app, 130, 44));
+        app.update(0.1);
+        app.world.money = 9000.0;
+        press(&mut app, KeyCode::Char('s'));
+        println!("{}\n", screen(&mut app, 130, 36));
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Tab);
+        press(&mut app, KeyCode::Enter);
+        println!("{}", screen(&mut app, 130, 36));
     }
 
     #[test]
@@ -1009,7 +1195,7 @@ mod tests {
             press(&mut app, KeyCode::Char('?'));
             screen(&mut app, w, h);
             press(&mut app, KeyCode::Esc);
-            for popup in ['t', 'e', 'u', 'c', 'v', 'r', 'n', 'g', 'o'] {
+            for popup in ['t', 'e', 'u', 'c', 'v', 'r', 'n', 'g', 'o', 's'] {
                 press(&mut app, KeyCode::Char(popup));
                 screen(&mut app, w, h);
                 press(&mut app, KeyCode::End);

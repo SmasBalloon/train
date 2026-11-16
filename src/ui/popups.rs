@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Padding, Paragraph, Widget, Wrap};
 
-use crate::data::{BonusKind, Branch, Effect, EventEffect, StaffRole, UpgradeEffect};
+use crate::data::{BonusKind, Branch, Effect, EventEffect, Research, StaffRole, UpgradeEffect};
 use crate::sim::{ActionError, LineProps, TrainState, allowed_speed, demand_per_hour};
 
 use super::app::{App, NetworkRow, Popup};
@@ -18,6 +18,7 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::None => {}
         Popup::Shop { sel } => draw_shop(app, buf, area, sel),
         Popup::Research { sel, branch } => draw_research(app, buf, area, sel, branch),
+        Popup::Tree { sel } => super::tree::draw(app, buf, area, sel),
         Popup::Manage { sel } => draw_manage(app, buf, area, sel),
         Popup::Eras { sel } => draw_eras(app, buf, area, sel),
         Popup::Upgrades { sel } => draw_upgrades(app, buf, area, sel),
@@ -25,6 +26,7 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::Network { sel } => draw_network(app, buf, area, sel),
         Popup::Staff { sel } => draw_staff(app, buf, area, sel),
         Popup::Company { sel, .. } => draw_company(app, buf, area, sel),
+        Popup::Crew { sel, recruiting } => draw_crew(app, buf, area, sel, recruiting),
         Popup::Fleet { sel } => draw_fleet(app, buf, area, sel),
         Popup::Event { sel } => draw_event(app, buf, area, sel),
         Popup::Outcome { event, choice } => draw_outcome(app, buf, area, event, choice),
@@ -51,8 +53,19 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
 }
 
 /// Dessine un cadre centré et renvoie sa zone intérieure.
-fn window(app: &App, buf: &mut Buffer, area: Rect, title: &str, width: u16, height: u16) -> Rect {
-    let rect = centered(area, width, height);
+pub fn window(
+    app: &App,
+    buf: &mut Buffer,
+    area: Rect,
+    title: &str,
+    width: u16,
+    height: u16,
+) -> Rect {
+    frame_at(app, buf, centered(area, width, height), title)
+}
+
+/// Dessine un cadre à l'emplacement donné et renvoie sa zone intérieure.
+pub fn frame_at(app: &App, buf: &mut Buffer, rect: Rect, title: &str) -> Rect {
     let block = Block::bordered()
         .border_set(app.glyphs.border)
         .border_style(app.theme.border)
@@ -102,7 +115,7 @@ fn render_list(buf: &mut Buffer, area: Rect, rows: Vec<Line>, sel: usize) {
     Paragraph::new(visible).render(area, buf);
 }
 
-fn footer(app: &App, buf: &mut Buffer, area: Rect, hint: &str) {
+pub fn footer(app: &App, buf: &mut Buffer, area: Rect, hint: &str) {
     let line = match &app.popup_msg {
         Some(msg) => Line::styled(msg.clone(), app.theme.warn),
         None => Line::styled(hint.to_string(), app.theme.dim),
@@ -149,7 +162,7 @@ fn traction_name(traction: &str) -> &str {
     }
 }
 
-fn branch_name(branch: Branch) -> &'static str {
+pub fn branch_name(branch: Branch) -> &'static str {
     match branch {
         Branch::Traction => "Traction",
         Branch::RunningGear => "Roulement",
@@ -378,6 +391,70 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
 
 // ─────────────────────────── Recherche ───────────────────────────
 
+/// Fiche d'une recherche : description, effets, ce qu'elle débloque, prérequis.
+pub fn research_card<'a>(app: &'a App, r: &'a Research) -> Vec<Line<'a>> {
+    let t = &app.theme;
+    let g = &app.glyphs;
+    let era = app
+        .data
+        .era(&r.era)
+        .map_or(r.era.as_str(), |e| e.name.fr.as_str());
+    let mut lines = vec![
+        Line::styled(format!("{} {} {}", r.name.fr, g.dash, r.year), t.title),
+        Line::styled(
+            format!("{} {} {era}", branch_name(r.branch), g.bullet),
+            t.dim,
+        ),
+        Line::raw(""),
+        Line::styled(r.description.fr.clone(), t.text),
+        Line::raw(""),
+    ];
+    if !r.effects.is_empty() {
+        let effects: Vec<String> = r.effects.iter().map(describe_effect).collect();
+        lines.push(Line::styled(
+            format!("Effets : {}", effects.join(", ")),
+            t.good,
+        ));
+    }
+    let mut unlocks: Vec<&str> = app
+        .data
+        .unlocked_by(&r.id)
+        .iter()
+        .map(|l| l.name.as_str())
+        .collect();
+    unlocks.extend(
+        app.data
+            .upgrades_unlocked_by(&r.id)
+            .iter()
+            .map(|u| u.name.fr.as_str()),
+    );
+    if !unlocks.is_empty() {
+        lines.push(Line::styled(
+            format!("Débloque : {}", unlocks.join(", ")),
+            t.good,
+        ));
+    }
+    for required in r.requires.iter().filter_map(|id| app.data.research(id)) {
+        let done = app.world.research_done.contains(&required.id);
+        lines.push(Line::styled(
+            format!(
+                "{} Prérequis : {}",
+                if done { g.check } else { g.dash },
+                required.name.fr
+            ),
+            if done { t.dim } else { t.warn },
+        ));
+    }
+    if let Some(blocker) = app
+        .world
+        .research_blocker(&app.data, r)
+        .filter(|b| *b != ActionError::AlreadyResearched)
+    {
+        lines.push(Line::styled(format!("Indisponible : {blocker}"), t.warn));
+    }
+    lines
+}
+
 fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Option<Branch>) {
     let t = &app.theme;
     let g = &app.glyphs;
@@ -464,64 +541,7 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
     render_list(buf, list, rows, sel);
 
     if let Some(r) = items.get(sel) {
-        let era = app
-            .data
-            .era(&r.era)
-            .map_or(r.era.as_str(), |e| e.name.fr.as_str());
-        let mut lines = vec![
-            Line::styled(format!("{} {} {}", r.name.fr, g.dash, r.year), t.title),
-            Line::styled(
-                format!("{} {} {era}", branch_name(r.branch), g.bullet),
-                t.dim,
-            ),
-            Line::raw(""),
-            Line::styled(r.description.fr.clone(), t.text),
-            Line::raw(""),
-        ];
-        if !r.effects.is_empty() {
-            let effects: Vec<String> = r.effects.iter().map(describe_effect).collect();
-            lines.push(Line::styled(
-                format!("Effets : {}", effects.join(", ")),
-                t.good,
-            ));
-        }
-        let mut unlocks: Vec<&str> = app
-            .data
-            .unlocked_by(&r.id)
-            .iter()
-            .map(|l| l.name.as_str())
-            .collect();
-        unlocks.extend(
-            app.data
-                .upgrades_unlocked_by(&r.id)
-                .iter()
-                .map(|u| u.name.fr.as_str()),
-        );
-        if !unlocks.is_empty() {
-            lines.push(Line::styled(
-                format!("Débloque : {}", unlocks.join(", ")),
-                t.good,
-            ));
-        }
-        for required in r.requires.iter().filter_map(|id| app.data.research(id)) {
-            let done = app.world.research_done.contains(&required.id);
-            lines.push(Line::styled(
-                format!(
-                    "{} Prérequis : {}",
-                    if done { g.check } else { g.dash },
-                    required.name.fr
-                ),
-                if done { t.dim } else { t.warn },
-            ));
-        }
-        if let Some(blocker) = app
-            .world
-            .research_blocker(&app.data, r)
-            .filter(|b| *b != ActionError::AlreadyResearched)
-        {
-            lines.push(Line::styled(format!("Indisponible : {blocker}"), t.warn));
-        }
-        Paragraph::new(lines)
+        Paragraph::new(research_card(app, r))
             .wrap(Wrap { trim: true })
             .render(detail, buf);
     }
@@ -529,7 +549,7 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
         app,
         buf,
         foot,
-        "Entrée : lancer    haut/bas : choisir    Tab : changer de branche    Échap : fermer",
+        "Entrée : lancer    haut/bas : choisir    Tab : branche    v : vue en arbre    Échap : fermer",
     );
 }
 
@@ -1296,6 +1316,184 @@ fn draw_company(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
     );
 }
 
+// ─────────────────────────── Équipages ───────────────────────────
+
+/// Compétence sur cinq étoiles.
+fn stars(app: &App, skill: f64) -> String {
+    format::gauge(skill, 5, app.glyphs.star, app.glyphs.star_empty)
+}
+
+fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bool) {
+    let t = &app.theme;
+    let g = &app.glyphs;
+    let rules = &app.data.crew;
+    let members = if recruiting {
+        &app.world.candidates
+    } else {
+        &app.world.crew
+    };
+    let inner = window(
+        app,
+        buf,
+        area,
+        "Équipages : conducteurs et contrôleurs",
+        104,
+        30,
+    );
+    let list_height = (members.len() as u16 + 2)
+        .min(inner.height.saturating_sub(4) / 2)
+        .max(2);
+    let [tabs, list, detail, foot] = Layout::vertical([
+        Constraint::Length(2),
+        Constraint::Length(list_height),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .areas(inner);
+
+    let tab = |label: String, on: bool| {
+        Span::styled(
+            format!(" {label} "),
+            if on { t.text.patch(t.selected) } else { t.text },
+        )
+    };
+    let wages = app.world.crew_wages_per_hour(&app.data);
+    Paragraph::new(Line::from(vec![
+        tab(format!("Employés {}", app.world.crew.len()), !recruiting),
+        Span::raw(" "),
+        tab(
+            format!("Recrutement {}", app.world.candidates.len()),
+            recruiting,
+        ),
+        Span::styled(
+            format!("   masse salariale : {}/h", format::money(wages)),
+            t.dim,
+        ),
+    ]))
+    .render(tabs, buf);
+
+    let rows: Vec<Line> = members
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let post = if recruiting {
+                format!("prime {}", format::money(app.world.hire_fee(&app.data, m)))
+            } else {
+                match m.train.and_then(|id| app.world.train(id)) {
+                    Some(train) => app.train_name(train),
+                    None => "en réserve".to_string(),
+                }
+            };
+            let text = format!(
+                "{} {:<22} {:<11} {}  {}  {}  {:>9}/h  ",
+                cursor(app, i == sel),
+                m.name,
+                m.role.name(),
+                stars(app, m.skills[0]),
+                stars(app, m.skills[1]),
+                stars(app, m.skills[2]),
+                format::money(app.world.wage_of(&app.data, m)),
+            );
+            let style = if recruiting && app.world.money < app.world.hire_fee(&app.data, m) {
+                t.dim
+            } else if m.train.is_some() || recruiting {
+                t.good
+            } else {
+                t.dim
+            };
+            Line::from(vec![
+                Span::styled(text, row_style(app, i == sel)),
+                Span::styled(post, style),
+            ])
+        })
+        .collect();
+    if rows.is_empty() {
+        let text = if recruiting {
+            "Plus de candidats aujourd'hui : de nouveaux se présenteront demain."
+        } else {
+            "Aucun équipier pour l'instant : Tab ouvre le recrutement. Sans équipage désigné, un train roule avec du personnel ordinaire, sans bonus."
+        };
+        Paragraph::new(Line::styled(text, t.dim))
+            .wrap(Wrap { trim: true })
+            .render(list, buf);
+    } else {
+        render_list(buf, list, rows, sel);
+    }
+
+    let mut lines = Vec::new();
+    if let Some(m) = members.get(sel) {
+        let e = &rules.effects;
+        // Ce que vaut chaque compétence à ce niveau.
+        let effects: [(f64, &str, &str); 3] = match m.role {
+            crate::sim::CrewRole::Driver => [
+                (e.driving_accel, "+", "d'accélération et de freinage"),
+                (e.economy_fuel, "-", "de consommation"),
+                (e.care_wear, "-", "d'usure de la voie"),
+            ],
+            crate::sim::CrewRole::Conductor => [
+                (e.service_comfort, "+", "de confort pour les voyageurs"),
+                (e.control_revenue, "+", "de recettes"),
+                (e.boarding_speed, "+", "de vitesse d'embarquement"),
+            ],
+        };
+        lines.push(Line::styled(
+            format!(
+                "{} {} {} {} {} km en service",
+                m.name,
+                g.dash,
+                m.role.name().to_lowercase(),
+                g.bullet,
+                format::int(m.km)
+            ),
+            t.title,
+        ));
+        for ((skill, name), (max, sign, what)) in m.skills.iter().zip(m.role.skills()).zip(effects)
+        {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{name:<13} {} ", stars(app, *skill)), t.text),
+                Span::styled(
+                    format!(
+                        "{:>4}   {sign}{} {what}",
+                        format::percent(*skill),
+                        format::percent(skill * max)
+                    ),
+                    t.dim,
+                ),
+            ]));
+        }
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            "Les compétences progressent avec les kilomètres parcourus en service ; un équipier en réserve est payé mais n'apprend rien.",
+            t.dim,
+        ));
+        if !recruiting {
+            let target = app
+                .selected
+                .and_then(|id| app.world.train(id))
+                .map(|train| app.train_name(train));
+            if let Some(target) = target {
+                lines.push(Line::styled(
+                    format!("Train sélectionné sur la carte : {target}."),
+                    t.dim,
+                ));
+            }
+        }
+    }
+    Paragraph::new(lines)
+        .wrap(Wrap { trim: true })
+        .render(detail, buf);
+    footer(
+        app,
+        buf,
+        foot,
+        if recruiting {
+            "Entrée : embaucher    Tab : employés    haut/bas : choisir    Échap : fermer"
+        } else {
+            "Entrée : affecter au train sélectionné (ou réserve)    x : licencier    Tab : recrutement    Échap : fermer"
+        },
+    );
+}
+
 // ───────────────────────────── Flotte ─────────────────────────────
 
 fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
@@ -1696,7 +1894,8 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("u", "améliorations de la ligne (rails, caténaire...)"),
         ("c", "combustibles : stocks et cours du jour"),
         ("t", "tarifs et horaires, satisfaction des clientèles"),
-        ("g", "personnel : automatiser réparations, achats, horaires"),
+        ("s", "équipages : conducteurs et contrôleurs, recrutement"),
+        ("g", "services : automatiser réparations, achats, horaires"),
         ("o", "compagnie : nationaliser, bonus permanents"),
         ("v", "flotte : liste des trains, revente"),
         ("b", "tableau des départs et arrivées"),

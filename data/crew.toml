@@ -1,0 +1,29 @@
+# Équipages : conducteurs et contrôleurs affectés aux trains.
+#
+# Un train sans équipage désigné roule avec du personnel ordinaire, sans bonus.
+# Chaque compétence va de 0 à 1 (affichée sur cinq étoiles) et progresse avec
+# les kilomètres parcourus.
+
+candidates_per_day = 4      # candidats proposés chaque jour de jeu (moitié de chaque métier)
+base_wage          = 3.0    # salaire horaire d'un débutant, première époque
+skill_wage         = 9.0    # supplément horaire pour un équipier parfait
+hire_fee_hours     = 24.0   # prime d'embauche, en heures de salaire
+xp_per_km          = 0.00002  # part du chemin vers la perfection gagnée par km parcouru
+
+# Effet d'une compétence au maximum (un équipier à moitié compétent en donne la moitié).
+[effects]
+driving_accel   = 0.30   # conduite : accélération et freinage, donc temps de parcours
+economy_fuel    = 0.15   # économie : consommation en moins
+care_wear       = 0.30   # douceur : usure de la voie en moins
+service_comfort = 0.15   # accueil : confort ressenti par les voyageurs
+control_revenue = 0.10   # contrôle : recettes en plus (moins de fraude)
+boarding_speed  = 0.50   # embarquement : montée des voyageurs plus rapide
+
+[names]
+first = ["Jean", "Louis", "Pierre", "Émile", "Henri", "Marcel", "Georges", "André", "Lucien", "Victor",
+         "Marie", "Jeanne", "Louise", "Marguerite", "Suzanne", "Hélène", "Yvonne", "Madeleine", "Alice", "Rose",
+         "George", "Thomas", "William", "Arthur", "Edith", "Mary", "Karl", "Anna", "Otto", "Clara",
+         "Pablo", "Carmen", "Ivan", "Olga"]
+last  = ["Morel", "Lefèvre", "Girard", "Roussel", "Marchand", "Dupuis", "Lambert", "Fontaine", "Chevalier", "Perrin",
+         "Barbier", "Renaud", "Colin", "Meunier", "Brunet", "Gauthier", "Carpentier", "Leclerc", "Hubert", "Masson",
+         "Hackworth", "Walker", "Turner", "Fletcher", "Schmidt", "Weber", "Fischer", "Navarro", "Ortega", "Volkov"]

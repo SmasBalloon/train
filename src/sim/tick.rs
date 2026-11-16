@@ -195,7 +195,9 @@ pub(crate) fn plan_trip(
     }
     .max(0.0);
     let allowed = allowed_speed(data, m, loco, line_state);
-    let (accel, decel) = (m.accel_of(loco, b), m.decel(b));
+    // Un bon conducteur démarre plus franchement et freine plus tard.
+    let finesse = 1.0 + data.crew.effects.driving_accel * train.crew.driving();
+    let (accel, decel) = (m.accel_of(loco, b) * finesse, m.decel(b) * finesse);
     let condition = line_state.map_or(1.0, |l| l.condition);
     Some(Trip {
         started: clock,
@@ -325,6 +327,10 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
     let m = world.modifiers(data);
     let era = world.era(data);
     world.clock += h;
+    world.refresh_candidates(data);
+    world.sync_crew();
+    let crew_fx = data.crew.effects;
+    let mut driven: Vec<(u32, f64)> = Vec::new();
     // Les voyageurs arrivent dans les gares desservies, sans dépasser leur capacité
     // d'accueil. On parcourt les lignes une seule fois pour savoir qui dessert quoi.
     let mut links: BTreeMap<&str, Vec<(f64, f64)>> = BTreeMap::new();
@@ -421,7 +427,8 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                     // Les grandes rames ont plus de portes : elles se remplissent aussi vite.
                     let rate = b
                         .boarding_per_min
-                        .max(capacity as f64 / b.boarding_full_min);
+                        .max(capacity as f64 / b.boarding_full_min)
+                        * (1.0 + crew_fx.boarding_speed * train.crew.boarding());
                     train.board_acc += rate * h / 60.0;
                     let allowed = (train.board_acc + 1e-9).floor().max(0.0) as u32;
                     let mut boarded = 0;
@@ -493,11 +500,15 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                 .clamp(0.0, line.length_km);
                 let travelled = (position - train.pos_km).abs();
                 train.pos_km = position;
+                driven.push((train.id, travelled));
 
                 // Entretien et énergie.
                 net -= loco.upkeep_per_h * era.cost_mult * h / 3600.0;
                 if let Some(fuel) = data.fuel(&loco.fuel) {
-                    let need = travelled * loco.fuel_per_km * m.fuel;
+                    let need = travelled
+                        * loco.fuel_per_km
+                        * m.fuel
+                        * (1.0 - crew_fx.economy_fuel * train.crew.economy());
                     let price = fuel.price(clock, era);
                     if fuel.stock && era.rules.fuel_market {
                         let stock = world.fuel.entry(fuel.id.clone()).or_insert(0.0);
@@ -519,8 +530,12 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                 if let Some(state) = world.lines.get_mut(&line.id) {
                     let before = state.condition;
                     let upgrades = LineProps::of(state, data).wear;
-                    let wear =
-                        travelled * loco.track_wear * m.wear * upgrades * b.wear_per_train_km;
+                    let wear = travelled
+                        * loco.track_wear
+                        * m.wear
+                        * upgrades
+                        * b.wear_per_train_km
+                        * (1.0 - crew_fx.care_wear * train.crew.care());
                     state.condition = (before - wear).max(0.0);
                     if before >= b.wear_slow_threshold && state.condition < b.wear_slow_threshold {
                         events.push(SimEvent::TrackWorn {
@@ -536,6 +551,10 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                     let punctuality =
                         (1.0 - delay_s / 60.0 / b.delay_tolerance_min).clamp(0.0, 1.0);
 
+                    // Le contrôleur joue sur le confort ressenti et sur la fraude.
+                    let comfort =
+                        (m.comfort + crew_fx.service_comfort * train.crew.service()).min(1.0);
+                    let collected = 1.0 + crew_fx.control_revenue * train.crew.control();
                     let mut revenue = 0.0;
                     let mut passengers = 0;
                     for (class_id, &n) in &train.load {
@@ -549,9 +568,10 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                             * era.fare_mult
                             * m.fare
                             * class.fare_mult
-                            * fare_level;
+                            * fare_level
+                            * collected;
                         if let (Some(score), Some(mood)) = (
-                            trip_score(class, m.comfort, punctuality, train.crowding),
+                            trip_score(class, comfort, punctuality, train.crowding),
                             world.satisfaction.get_mut(class_id),
                         ) {
                             let weight = 1.0 - (-(n as f64) / b.satisfaction_inertia).exp();
@@ -596,6 +616,12 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
             }
         }
     }
+
+    // Les équipages apprennent en roulant, et sont payés à l'heure.
+    for (train, km) in driven {
+        world.train_crew_experience(&data.crew, train, km);
+    }
+    net -= world.crew_wages_per_hour(data) * h / 3600.0;
 
     // Salaires du personnel engagé.
     let salaries: f64 = world

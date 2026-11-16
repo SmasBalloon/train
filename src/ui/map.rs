@@ -710,17 +710,30 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
             ));
         }
     }
-    if let Some(active) = &app.world.research_active
-        && let Some(research) = app.data.research(&active.id)
-    {
-        let progress = active.progress_s / (research.duration_h * 3600.0);
-        spans.push(sep.clone());
-        spans.push((
-            format!("{} {}", research.name.fr, format::percent(progress)),
-            t.hud,
-        ));
-    }
     put_spans(buf, area, area.x as i32, area.y as i32, &spans);
+
+    // Recherche en cours : calée à droite, pour rester visible quelle que soit la largeur.
+    let mut right = area.right() as i32;
+    if app.paused || app.read_only {
+        right -= if app.read_only { 15 } else { 7 };
+    }
+    if let Some((research, progress, left_s)) = app.research_progress() {
+        let text = format!(
+            " {} {} {} {} ",
+            research.name.fr,
+            format::gauge(progress, 8, app.glyphs.gauge_full, app.glyphs.gauge_empty),
+            format::percent(progress),
+            format::duration(left_s)
+        );
+        put_str(
+            buf,
+            area,
+            right - text.chars().count() as i32,
+            area.y as i32,
+            &text,
+            t.hud.patch(t.title),
+        );
+    }
 
     if app.paused || app.read_only {
         let text = if app.read_only {
@@ -772,7 +785,8 @@ fn draw_bottom_bar(app: &App, buf: &mut Buffer, area: Rect) {
         ("u", "voie"),
         ("c", "combustible"),
         ("t", "tarifs"),
-        ("g", "personnel"),
+        ("s", "équipages"),
+        ("g", "services"),
         ("o", "compagnie"),
         ("v", "flotte"),
         ("b", "tableau"),
@@ -926,6 +940,19 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
             Span::styled(format!(" {}/{capacity}", train.count()), t.text),
         ]),
         Line::styled(by_class.join(format!(" {} ", g.bullet).as_str()), t.dim),
+        Line::styled(
+            format!(
+                "Équipage : {} {} {}",
+                app.world
+                    .crew_on(train.id, crate::sim::CrewRole::Driver)
+                    .map_or("conducteur ordinaire", |c| c.name.as_str()),
+                g.bullet,
+                app.world
+                    .crew_on(train.id, crate::sim::CrewRole::Conductor)
+                    .map_or("contrôleur ordinaire", |c| c.name.as_str()),
+            ),
+            t.dim,
+        ),
     ];
     let rect = Rect::new(
         area.right() - WIDTH,

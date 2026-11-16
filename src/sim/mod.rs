@@ -1,6 +1,7 @@
 //! Simulation pure : aucun accès au terminal, au disque ou à l'horloge.
 
 mod actions;
+mod crew;
 mod kinematics;
 mod modifiers;
 mod offline;
@@ -8,6 +9,7 @@ mod tick;
 mod world;
 
 pub use actions::{ActionError, UnlockStatus};
+pub use crew::{CrewMember, CrewRole, TrainCrew};
 pub use kinematics::Profile;
 pub use modifiers::{LineProps, Modifiers};
 pub use offline::{OFFLINE_STEP, OfflineReport, catch_up};

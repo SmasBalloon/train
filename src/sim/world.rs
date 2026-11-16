@@ -4,10 +4,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::data::{BonusKind, Era, GameData, Line};
 
+use super::crew::{CrewMember, TrainCrew};
 use super::kinematics::Profile;
 use super::modifiers::Modifiers;
 
-pub const SAVE_VERSION: u32 = 5;
+pub const SAVE_VERSION: u32 = 6;
 
 /// Constante de temps (secondes de jeu) de la moyenne glissante des revenus.
 pub(crate) const INCOME_TAU: f64 = 2.0 * 3600.0;
@@ -95,6 +96,9 @@ pub struct Train {
     /// Trajet en cours, quand le train roule.
     #[serde(default)]
     pub trip: Option<Trip>,
+    /// Compétences de l'équipage affecté, recopiées depuis la liste des équipiers.
+    #[serde(default)]
+    pub crew: TrainCrew,
     /// Note d'affluence (0 à 1) relevée au départ ; 1 = à l'aise.
     #[serde(default = "one")]
     pub crowding: f64,
@@ -254,6 +258,17 @@ pub struct World {
     pub staff: BTreeSet<String>,
     #[serde(default)]
     pub prestige: Prestige,
+    /// Conducteurs et contrôleurs employés.
+    #[serde(default)]
+    pub crew: Vec<CrewMember>,
+    /// Candidats du jour au bureau de recrutement.
+    #[serde(default)]
+    pub candidates: Vec<CrewMember>,
+    /// Jour pour lequel les candidats ont été tirés.
+    #[serde(default)]
+    pub candidates_day: u64,
+    #[serde(default)]
+    pub next_crew_id: u32,
 }
 
 impl World {
@@ -282,6 +297,10 @@ impl World {
             countries: BTreeSet::new(),
             staff: BTreeSet::new(),
             prestige: Prestige::default(),
+            crew: Vec::new(),
+            candidates: Vec::new(),
+            candidates_day: 0,
+            next_crew_id: 0,
         };
         world.reconcile(data);
         world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
@@ -355,6 +374,15 @@ impl World {
             .retain(|id, stock| data.fuel(id).is_some() && stock.is_finite() && *stock >= 0.0);
         self.events_done.retain(|id| data.event(id).is_some());
         self.staff.retain(|id| data.staff(id).is_some());
+        for member in self.crew.iter_mut().chain(&mut self.candidates) {
+            for skill in &mut member.skills {
+                *skill = if skill.is_finite() {
+                    skill.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+            }
+        }
         self.prestige
             .levels
             .retain(|id, _| data.bonus(id).is_some());
@@ -436,6 +464,7 @@ impl World {
             let s = self.satisfaction.entry(class.id.clone()).or_insert(0.5);
             *s = s.clamp(0.0, 1.0);
         }
+        self.sync_crew();
     }
 
     /// Arrêt prévu en gare sur une ligne, en secondes de jeu.
@@ -459,6 +488,7 @@ impl World {
             sched_departure: self.clock + self.dwell_s(line),
             late_s: 0.0,
             trip: None,
+            crew: TrainCrew::default(),
             crowding: 1.0,
         });
         id

@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 /// Fichiers de données, dans l'ordre de chargement, avec leur contenu embarqué.
-pub const FILES: [(&str, &str); 11] = [
+pub const FILES: [(&str, &str); 12] = [
     ("balance.toml", include_str!("../../data/balance.toml")),
     ("eras.toml", include_str!("../../data/eras.toml")),
     ("fuels.toml", include_str!("../../data/fuels.toml")),
@@ -27,6 +27,7 @@ pub const FILES: [(&str, &str); 11] = [
     ("events.toml", include_str!("../../data/events.toml")),
     ("staff.toml", include_str!("../../data/staff.toml")),
     ("prestige.toml", include_str!("../../data/prestige.toml")),
+    ("crew.toml", include_str!("../../data/crew.toml")),
 ];
 
 /// Texte traduit. Le français est obligatoire, l'anglais facultatif.
@@ -294,6 +295,38 @@ pub struct Upgrade {
     pub requires_upgrade: Option<String>,
     #[serde(default)]
     pub effects: Vec<UpgradeEffect>,
+}
+
+/// Effet de chaque compétence d'équipage quand elle est au maximum.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CrewEffects {
+    pub driving_accel: f64,
+    pub economy_fuel: f64,
+    pub care_wear: f64,
+    pub service_comfort: f64,
+    pub control_revenue: f64,
+    pub boarding_speed: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CrewNames {
+    pub first: Vec<String>,
+    pub last: Vec<String>,
+}
+
+/// Règles des équipages : recrutement, salaires, progression, effets.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CrewRules {
+    pub candidates_per_day: u32,
+    pub base_wage: f64,
+    pub skill_wage: f64,
+    pub hire_fee_hours: f64,
+    pub xp_per_km: f64,
+    pub effects: CrewEffects,
+    pub names: CrewNames,
 }
 
 /// Tâche qu'un service automatise.
@@ -613,6 +646,7 @@ pub struct GameData {
     pub events: Vec<GameEvent>,
     pub staff: Vec<Staff>,
     pub bonuses: Vec<PrestigeBonus>,
+    pub crew: CrewRules,
 }
 
 fn parse<T: DeserializeOwned>(src: &str, file: &str) -> Result<T> {
@@ -668,8 +702,18 @@ impl GameData {
             .try_into()
             .context("balance.toml : clé manquante, inconnue ou de mauvais type")?;
 
+        // Les règles des équipages se surchargent clé par clé, comme l'équilibrage.
+        let mut crew: toml::Table = parse(base.get("crew.toml"), "crew.toml")?;
+        if let Some(o) = overlay {
+            crew.extend(parse::<toml::Table>(o.get("crew.toml"), "mods/crew.toml")?);
+        }
+        let crew: CrewRules = toml::Value::Table(crew)
+            .try_into()
+            .context("crew.toml : clé manquante, inconnue ou de mauvais type")?;
+
         let data = GameData {
             balance,
+            crew,
             eras: load_list("eras.toml", base, overlay, |e: &Era| &e.id)?,
             fuels: load_list("fuels.toml", base, overlay, |f: &Fuel| &f.id)?,
             traffic: load_list("traffic.toml", base, overlay, |c: &TrafficClass| &c.id)?,

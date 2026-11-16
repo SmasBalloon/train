@@ -15,7 +15,7 @@ use super::camera::{Camera, Polyline};
 use super::format;
 use super::glyphs::Glyphs;
 use super::theme::{ColorMode, Theme};
-use super::{map, popups};
+use super::{map, popups, tree};
 
 /// Durée d'affichage d'un message du journal, en secondes réelles.
 pub const LOG_TTL: f64 = 12.0;
@@ -47,6 +47,10 @@ pub enum Popup {
         sel: usize,
         branch: Option<Branch>,
     },
+    /// Arbre de recherche dessiné : `sel` est le rang de la recherche dans les données.
+    Tree {
+        sel: usize,
+    },
     /// Tarifs et horaires.
     Manage {
         sel: usize,
@@ -76,6 +80,11 @@ pub enum Popup {
     Company {
         sel: usize,
         confirm: bool,
+    },
+    /// Équipages : conducteurs et contrôleurs employés, ou candidats à l'embauche.
+    Crew {
+        sel: usize,
+        recruiting: bool,
     },
     /// Liste des trains.
     Fleet {
@@ -144,6 +153,8 @@ pub struct App {
     paths: HashMap<String, Polyline>,
     /// Ligne sur laquelle portent les commandes (achats, tarifs, améliorations).
     line: String,
+    /// Orientation de l'arbre de recherche : époques de haut en bas, ou de gauche à droite.
+    pub tree_vertical: bool,
 }
 
 impl App {
@@ -186,6 +197,7 @@ impl App {
             drag: None,
             paths,
             line,
+            tree_vertical: true,
         }
     }
 
@@ -745,6 +757,74 @@ impl App {
         }
     }
 
+    /// Fenêtre des équipages : embauche un candidat, ou affecte un équipier au
+    /// train sélectionné (une seconde fois : retour en réserve).
+    fn crew_action(&mut self, sel: usize, recruiting: bool) {
+        if recruiting {
+            let name = self.world.candidates.get(sel).map(|c| c.name.clone());
+            match self.world.hire_crew(&self.data, sel) {
+                Ok(_) => {
+                    self.popup_msg = None;
+                    let left = self.world.candidates.len();
+                    self.popup = Popup::Crew {
+                        sel: sel.min(left.saturating_sub(1)),
+                        recruiting: true,
+                    };
+                    self.push_log(
+                        format!("{} rejoint la compagnie", name.unwrap_or_default()),
+                        LogKind::Good,
+                    );
+                }
+                Err(e) => self.popup_msg = Some(e.to_string()),
+            }
+            return;
+        }
+        let Some(member) = self.world.crew.get(sel) else {
+            return;
+        };
+        let (id, name, current) = (member.id, member.name.clone(), member.train);
+        let Some(train) = self.selected else {
+            self.popup_msg = Some("Sélectionne d'abord un train sur la carte (Tab)".to_string());
+            return;
+        };
+        let target = if current == Some(train) {
+            None
+        } else {
+            Some(train)
+        };
+        match self.world.assign_crew(id, target) {
+            Ok(()) => {
+                self.popup_msg = None;
+                let train_name = self
+                    .world
+                    .train(train)
+                    .map(|t| self.train_name(t))
+                    .unwrap_or_default();
+                let text = match target {
+                    Some(_) => format!("{name} prend son service sur {train_name}"),
+                    None => format!("{name} retourne en réserve"),
+                };
+                self.push_log(text, LogKind::Info);
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    fn dismiss_crew(&mut self, sel: usize) {
+        let Some(member) = self.world.crew.get(sel) else {
+            return;
+        };
+        let (id, name) = (member.id, member.name.clone());
+        if self.world.dismiss_crew(id).is_ok() {
+            let left = self.world.crew.len();
+            self.popup = Popup::Crew {
+                sel: sel.min(left.saturating_sub(1)),
+                recruiting: false,
+            };
+            self.push_log(format!("{name} quitte la compagnie"), LogKind::Info);
+        }
+    }
+
     fn hire(&mut self, sel: usize) {
         let Some(staff) = self.data.staff.get(sel) else {
             return;
@@ -821,6 +901,42 @@ impl App {
         };
         match self.world.resolve_event(&self.data, sel) {
             Ok(()) => self.open(Popup::Outcome { event, choice: sel }),
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Recherche en cours : avancement (0 à 1) et temps réel restant, en secondes.
+    pub fn research_progress(&self) -> Option<(&Research, f64, f64)> {
+        let active = self.world.research_active.as_ref()?;
+        let research = self.data.research(&active.id)?;
+        let total = research.duration_h * 3600.0;
+        let speed = self.world.modifiers(&self.data).research_speed * self.data.balance.time_scale;
+        let left = (total - active.progress_s).max(0.0) / speed;
+        Some((research, (active.progress_s / total).clamp(0.0, 1.0), left))
+    }
+
+    /// Ouvre l'arbre de recherche sur la recherche en cours, sinon sur la première.
+    pub fn open_tree(&mut self) {
+        let sel = self
+            .world
+            .research_active
+            .as_ref()
+            .and_then(|a| self.data.research.iter().position(|r| r.id == a.id))
+            .unwrap_or(0);
+        self.open(Popup::Tree { sel });
+    }
+
+    /// Lance la recherche de rang `index` dans les données.
+    fn research_at(&mut self, index: usize) {
+        let Some(research) = self.data.research.get(index) else {
+            return;
+        };
+        let (id, name) = (research.id.clone(), research.name.fr.clone());
+        match self.world.start_research(&self.data, &id) {
+            Ok(()) => {
+                self.popup_msg = None;
+                self.push_log(format!("Recherche lancée : {name}"), LogKind::Info);
+            }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
     }
@@ -915,6 +1031,49 @@ impl App {
                     self.open(Popup::Shop { sel });
                 }
             }
+            Popup::Tree { sel } => {
+                let direction = match code {
+                    KeyCode::Left | KeyCode::Char('h') => Some(tree::Move::Left),
+                    KeyCode::Right | KeyCode::Char('l') => Some(tree::Move::Right),
+                    KeyCode::Up | KeyCode::Char('k') => Some(tree::Move::Up),
+                    KeyCode::Down | KeyCode::Char('j') => Some(tree::Move::Down),
+                    _ => None,
+                };
+                if confirms {
+                    self.research_at(sel);
+                } else if code == KeyCode::Tab {
+                    self.tree_vertical = !self.tree_vertical;
+                } else if code == KeyCode::Char('v') {
+                    // Vue en liste, sur la même recherche.
+                    let sel = self
+                        .data
+                        .research
+                        .get(sel)
+                        .and_then(|r| {
+                            self.research_items(None)
+                                .iter()
+                                .position(|item| item.id == r.id)
+                        })
+                        .unwrap_or(0);
+                    self.open(Popup::Research { sel, branch: None });
+                } else if closes || code == KeyCode::Char('r') {
+                    self.popup = Popup::None;
+                } else if let Some(direction) = direction {
+                    let layout = tree::TreeLayout::new(&self.data);
+                    if let Some(sel) = tree::step(&layout, sel, direction, self.tree_vertical) {
+                        self.open(Popup::Tree { sel });
+                    }
+                }
+            }
+            Popup::Research { sel, branch } if code == KeyCode::Char('v') => {
+                // Retour à l'arbre, sur la même recherche.
+                let sel = self
+                    .research_items(branch)
+                    .get(sel)
+                    .and_then(|item| self.data.research.iter().position(|r| r.id == item.id))
+                    .unwrap_or(0);
+                self.open(Popup::Tree { sel });
+            }
             Popup::Research { sel, branch } => {
                 if confirms {
                     self.research(sel, branch);
@@ -1000,6 +1159,27 @@ impl App {
                     });
                 }
             }
+            Popup::Crew { sel, recruiting } => {
+                let count = if recruiting {
+                    self.world.candidates.len()
+                } else {
+                    self.world.crew.len()
+                };
+                if confirms {
+                    self.crew_action(sel, recruiting);
+                } else if code == KeyCode::Tab {
+                    self.open(Popup::Crew {
+                        sel: 0,
+                        recruiting: !recruiting,
+                    });
+                } else if code == KeyCode::Char('x') && !recruiting {
+                    self.dismiss_crew(sel);
+                } else if closes || code == KeyCode::Char('s') {
+                    self.popup = Popup::None;
+                } else if let Some(sel) = move_selection(code, sel, count) {
+                    self.open(Popup::Crew { sel, recruiting });
+                }
+            }
             Popup::Fleet { sel } => {
                 if confirms {
                     if let Some(id) = self.world.trains.get(sel).map(|t| t.id) {
@@ -1041,7 +1221,20 @@ impl App {
         let acts = matches!(
             key.code,
             KeyCode::Char(
-                'd' | ' ' | 'a' | 'r' | 't' | 'm' | 'p' | 'e' | 'u' | 'c' | 'v' | 'n' | 'g' | 'o'
+                'd' | ' '
+                    | 'a'
+                    | 'r'
+                    | 't'
+                    | 'm'
+                    | 'p'
+                    | 'e'
+                    | 'u'
+                    | 'c'
+                    | 'v'
+                    | 'n'
+                    | 'g'
+                    | 'o'
+                    | 's'
             ) | KeyCode::Enter
         );
         if acts && !self.can_act() {
@@ -1054,10 +1247,7 @@ impl App {
             KeyCode::Tab => self.select_next(1),
             KeyCode::BackTab => self.select_next(-1),
             KeyCode::Char('a') => self.open(Popup::Shop { sel: 0 }),
-            KeyCode::Char('r') => self.open(Popup::Research {
-                sel: 0,
-                branch: None,
-            }),
+            KeyCode::Char('r') => self.open_tree(),
             KeyCode::Char('t') => self.open(Popup::Manage { sel: 0 }),
             KeyCode::Char('e') => self.open(Popup::Eras {
                 sel: self.world.era_index(&self.data),
@@ -1069,6 +1259,11 @@ impl App {
                 sel: 0,
                 confirm: false,
             }),
+            KeyCode::Char('s') => {
+                // Sans personne à affecter, on ouvre directement sur le recrutement.
+                let recruiting = self.world.crew.is_empty();
+                self.open(Popup::Crew { sel: 0, recruiting });
+            }
             KeyCode::Char('v') => {
                 let sel = self
                     .selected
