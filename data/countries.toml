@@ -1,0 +1,37 @@
+# Pays, gares, lignes et décor. La carte est abstraite : `pos`, `via` et
+# `path` sont des coordonnées schématiques (x vers la droite, y vers le bas),
+# sans rapport avec la géographie réelle. `length_km` fixe la distance de jeu.
+
+[[country]]
+id         = "uk"
+name       = { fr = "Royaume-Uni", en = "United Kingdom" }
+gauge_mm   = 1435
+build_cost = 1.0
+terrain    = "rolling"
+
+  [[country.station]]
+  id         = "stockton"
+  name       = "Stockton"
+  pos        = [26.0, 8.0]
+  population = 6000
+
+  [[country.station]]
+  id         = "darlington"
+  name       = "Darlington"
+  pos        = [0.0, 0.0]
+  population = 6500
+
+  [[country.line]]
+  id         = "stockton_darlington"
+  name       = "Stockton & Darlington"
+  from       = "stockton"
+  to         = "darlington"
+  length_km  = 19.0
+  via        = [[22.0, 4.0], [12.0, 4.0], [8.0, 0.0]]
+  max_trains = 4
+  opened     = 1825
+
+  [[country.decor]]
+  kind = "river"
+  name = "Tees"
+  path = [[-6.0, 12.0], [2.0, 10.0], [9.0, 13.0], [17.0, 11.5], [23.0, 15.0], [32.0, 13.5]]

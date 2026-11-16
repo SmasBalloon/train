@@ -1,0 +1,36 @@
+# Recherches. branch : traction | running_gear | braking | signalling | comfort
+# effects : liste de { kind = "...", value = ... }
+#   speed_mult, capacity_mult, fare_mult, demand_mult, track_wear_mult, auto_dispatch
+
+[[research]]
+id         = "hand_signals"
+branch     = "signalling"
+year       = 1830
+cost       = 500.0
+duration_h = 4.0          # heures de jeu
+effects    = [{ kind = "auto_dispatch" }]
+name        = { fr = "Signaleurs de voie", en = "Railway policemen" }
+description = { fr = "Des agents postés le long de la ligne donnent le départ par signaux à bras et drapeaux. Les trains partent seuls dès qu'ils sont pleins, ou après une attente maximale.", en = "Men posted along the line give the right of way with hand and flag signals. Trains depart on their own." }
+
+[[research]]
+id         = "multitubular_boiler"
+branch     = "traction"
+year       = 1829
+cost       = 600.0
+duration_h = 6.0
+name        = { fr = "Chaudière multitubulaire", en = "Multitubular boiler" }
+description = { fr = "Des dizaines de tubes traversent la chaudière et multiplient la surface de chauffe : la vapeur est produite bien plus vite. Ouvre la voie à la Rocket.", en = "Dozens of fire tubes multiply the heating surface, producing steam far faster. Paves the way for Rocket." }
+
+[[research]]
+id         = "covered_carriages"
+branch     = "comfort"
+year       = 1830
+cost       = 900.0
+duration_h = 8.0
+effects    = [
+  { kind = "fare_mult", value = 1.20 },
+  { kind = "demand_mult", value = 1.15 },
+  { kind = "speed_mult", value = 0.95 },
+]
+name        = { fr = "Voitures fermées", en = "Covered carriages" }
+description = { fr = "Des voitures inspirées des diligences, avec toit et banquettes, remplacent les wagons découverts. Les voyageurs paient plus cher et viennent plus nombreux, mais les trains s'alourdissent.", en = "Coaches modelled on stagecoaches replace open wagons. Passengers pay more and come in greater numbers, but trains get heavier." }

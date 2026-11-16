@@ -1,0 +1,24 @@
+[package]
+name = "rainhill"
+version = "0.1.0"
+edition = "2024"
+description = "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain"
+license = "MIT"
+default-run = "rail"
+
+[lib]
+name = "rainhill"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rail"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+directories = "6.0.0"
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "1.2.1"

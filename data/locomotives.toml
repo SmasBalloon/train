@@ -1,0 +1,38 @@
+# Locomotives. `requires` liste les recherches nécessaires pour l'achat.
+
+[[locomotive]]
+id            = "locomotion_1"
+name          = "Locomotion n°1"
+builder       = "Robert Stephenson & Co."
+year          = 1825
+era           = "pioneers"
+traction      = "steam"
+wheels        = "0-4-0"
+top_speed_kmh = 24.0
+weight_t      = 6.6
+capacity      = 40
+cost          = 400.0
+upkeep_per_h  = 6.0
+track_wear    = 1.0
+[locomotive.history]
+fr = "Construite à Newcastle par George et Robert Stephenson, elle tracte le 27 septembre 1825 le train inaugural du Stockton & Darlington Railway, première ligne publique à utiliser la traction à vapeur. Lente mais robuste, elle tire ce jour-là des wagons de charbon et plusieurs centaines de passagers."
+en = "Built in Newcastle by George and Robert Stephenson, it hauled the inaugural train of the Stockton & Darlington Railway on 27 September 1825, the first public railway to use steam traction."
+
+[[locomotive]]
+id            = "rocket"
+name          = "Rocket"
+builder       = "Robert Stephenson & Co."
+year          = 1829
+era           = "pioneers"
+traction      = "steam"
+wheels        = "0-2-2"
+top_speed_kmh = 48.0
+weight_t      = 4.3
+capacity      = 30
+cost          = 1500.0
+upkeep_per_h  = 9.0
+track_wear    = 1.3
+requires      = ["multitubular_boiler"]
+[locomotive.history]
+fr = "Vainqueur du concours de Rainhill en octobre 1829, la Rocket atteint environ 48 km/h. Sa chaudière multitubulaire et son échappement dans la cheminée fixent l'architecture de presque toutes les locomotives à vapeur qui suivront. Légère et rapide, elle emporte moins qu'une machine lourde."
+en = "Winner of the Rainhill Trials in October 1829, Rocket reached about 30 mph. Its multitubular boiler and blastpipe set the template for nearly every steam locomotive that followed."
