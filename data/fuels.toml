@@ -1,0 +1,33 @@
+# Énergies. Les prix sont ceux de la première époque ; ils suivent ensuite
+# le `cost_mult` de l'époque en cours.
+#
+# stock       vrai : s'achète d'avance et se stocke ; faux : payé à la consommation
+# volatility  amplitude des variations du cours (0.3 = ±30 %)
+# lot         quantité achetée d'un coup dans la fenêtre des combustibles
+
+[[fuel]]
+id         = "coal"
+name       = { fr = "Charbon", en = "Coal" }
+unit       = "t"
+base_price = 12.0
+volatility = 0.30
+stock      = true
+lot        = 10.0
+
+[[fuel]]
+id         = "diesel"
+name       = { fr = "Gazole", en = "Diesel" }
+unit       = "kL"
+base_price = 40.0
+volatility = 0.35
+stock      = true
+lot        = 20.0
+
+[[fuel]]
+id         = "electricity"
+name       = { fr = "Électricité", en = "Electricity" }
+unit       = "MWh"
+base_price = 6.0
+volatility = 0.10
+stock      = false
+lot        = 0.0

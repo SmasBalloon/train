@@ -1,0 +1,114 @@
+# Époques. Elles se suivent dans l'ordre du fichier ; la première est celle de départ.
+#
+# demand_mult   les villes grandissent : demande et capacité des gares
+# fare_mult     niveau général des tarifs
+# cost_mult     niveau général des coûts d'exploitation (combustible, réparations)
+# build_mult    niveau du coût de construction des lignes
+# [era.rules]
+#   fuel_market     vrai : le combustible s'achète d'avance, à un cours qui varie
+#   water_stop_min  arrêt obligatoire des locomotives à vapeur pour faire de l'eau
+# [era.unlock]      conditions pour entrer dans l'époque (absent pour la première)
+
+[[era]]
+id          = "pioneers"
+name        = { fr = "Pionniers", en = "Pioneers" }
+from        = 1825
+to          = 1850
+demand_mult = 1.0
+fare_mult   = 1.0
+cost_mult   = 1.0
+build_mult  = 1.0
+description = { fr = "En 1825, le Stockton & Darlington ouvre la première ligne publique à vapeur. Tout reste à inventer : les machines cassent, les rails en fonte se brisent, les voyageurs s'entassent dans des wagons découverts. Le charbon est livré au jour le jour et les trains partent quand on leur fait signe." }
+[era.rules]
+fuel_market    = false
+water_stop_min = 0.0
+
+[[era]]
+id          = "steam"
+name        = { fr = "Âge d'or de la vapeur", en = "Golden age of steam" }
+from        = 1850
+to          = 1930
+demand_mult = 3.0
+fare_mult   = 1.5
+cost_mult   = 1.3
+build_mult  = 5.0
+description = { fr = "Le rail couvre l'Europe. Les express dépassent les 100 km/h, les voitures-lits et l'Orient-Express inventent le voyage de luxe. Mais une compagnie vit désormais de son approvisionnement : le charbon s'achète d'avance, à un cours qui varie, et les machines doivent s'arrêter pour faire de l'eau." }
+[era.rules]
+fuel_market    = true
+water_stop_min = 8.0
+[era.unlock]
+research   = ["hand_signals", "multitubular_boiler", "covered_carriages"]
+passengers = 15000
+cost       = 40000.0
+
+[[era]]
+id          = "apogee"
+name        = { fr = "Apogée de la vapeur", en = "Peak of steam" }
+from        = 1930
+to          = 1950
+demand_mult = 6.0
+fare_mult   = 2.5
+cost_mult   = 1.8
+build_mult  = 15.0
+description = { fr = "Les machines carénées se disputent les records : le 3 juillet 1938, la Mallard atteint 202,6 km/h, jamais égalé par une locomotive à vapeur. La vapeur touche à ses limites ; il faut des voies soudées, un block automatique et des freins modernes pour suivre." }
+[era.rules]
+fuel_market    = true
+water_stop_min = 8.0
+[era.unlock]
+research   = ["air_brake", "semaphore_block", "compound_engine"]
+passengers = 100000
+cost       = 2000000.0
+
+[[era]]
+id          = "modern"
+name        = { fr = "Diesel et électrification", en = "Diesel and electrification" }
+from        = 1950
+to          = 1964
+demand_mult = 12.0
+fare_mult   = 4.0
+cost_mult   = 2.5
+build_mult  = 60.0
+description = { fr = "La vapeur cède la place. Le diesel se passe de châteaux d'eau, et la caténaire donne aux machines électriques une puissance inédite : en mars 1955, la CC 7107 et la BB 9004 atteignent 331 km/h dans les Landes. Électrifier une ligne coûte cher, mais plus rien ne roule aussi vite." }
+[era.rules]
+fuel_market    = true
+water_stop_min = 8.0
+[era.unlock]
+research   = ["streamlining", "automatic_block", "electropneumatic_brake"]
+passengers = 500000
+cost       = 20000000.0
+
+[[era]]
+id          = "high_speed"
+name        = { fr = "Grande vitesse", en = "High speed" }
+from        = 1964
+to          = 2020
+demand_mult = 30.0
+fare_mult   = 8.0
+cost_mult   = 4.0
+build_mult  = 300.0
+description = { fr = "Le 1er octobre 1964, le Shinkansen relie Tokyo à Osaka à 210 km/h sur une ligne qui lui est réservée. Le TGV suit en 1981. La grande vitesse est un système : rames, voie, freinage et surtout signalisation en cabine, car à 300 km/h aucun conducteur ne lit un signal au bord de la voie." }
+[era.rules]
+fuel_market    = true
+water_stop_min = 0.0
+[era.unlock]
+research   = ["electric_traction", "disc_brakes", "ctc"]
+passengers = 2000000
+cost       = 200000000.0
+
+[[era]]
+id          = "future"
+name        = { fr = "Futur", en = "Future" }
+from        = 2020
+to          = 2100
+demand_mult = 60.0
+fare_mult   = 15.0
+cost_mult   = 6.0
+build_mult  = 1500.0
+description = { fr = "Au-delà de 400 km/h, la roue et le rail atteignent leurs limites. La sustentation magnétique supraconductrice a déjà dépassé 600 km/h aux essais ; plus loin, les projets de capsules en tube à basse pression restent, pour l'heure, des spéculations." }
+[era.rules]
+fuel_market    = true
+water_stop_min = 0.0
+[era.unlock]
+research   = ["cab_signalling", "lgv_track", "etcs"]
+passengers = 8000000
+cost       = 2000000000.0

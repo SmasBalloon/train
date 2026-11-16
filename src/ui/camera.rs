@@ -5,7 +5,7 @@
 //! ce qui les rend à peu près carrés.
 
 pub const MIN_SCALE: f64 = 0.5;
-pub const MAX_SCALE: f64 = 400.0;
+pub const MAX_SCALE: f64 = 3000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {

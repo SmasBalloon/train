@@ -1,0 +1,62 @@
+# Améliorations de ligne. Le prix est `cost_per_km` × longueur × coût du pays.
+#
+# effects :
+#   { kind = "line_speed", value = 140.0 }                     vitesse autorisée
+#   { kind = "line_speed", value = 650.0, only = ["maglev"] }  réservée à certaines tractions
+#   { kind = "wear_mult", value = 0.7 }                        usure de la voie
+
+[[upgrade]]
+id          = "steel_rails"
+era         = "steam"
+cost_per_km = 400.0
+requires    = ["bessemer_steel"]
+effects     = [{ kind = "line_speed", value = 140.0 }, { kind = "wear_mult", value = 0.7 }]
+name        = { fr = "Rails en acier", en = "Steel rails" }
+description = { fr = "Les rails en acier remplacent le fer : ils durent bien plus longtemps et supportent des express à 140 km/h." }
+
+[[upgrade]]
+id               = "heavy_track"
+era              = "apogee"
+cost_per_km      = 6000.0
+requires         = ["welded_rails"]
+requires_upgrade = "steel_rails"
+effects          = [{ kind = "line_speed", value = 220.0 }, { kind = "wear_mult", value = 0.85 }]
+name             = { fr = "Voie lourde soudée", en = "Heavy welded track" }
+description      = { fr = "Longs rails soudés sur traverses lourdes et ballast épais : la voie tient à 220 km/h." }
+
+[[upgrade]]
+id          = "catenary"
+era         = "modern"
+cost_per_km = 20000.0
+requires    = ["electric_traction"]
+name        = { fr = "Caténaire", en = "Overhead line" }
+description = { fr = "Électrification de la ligne : indispensable aux locomotives électriques." }
+
+[[upgrade]]
+id               = "lgv"
+era              = "high_speed"
+cost_per_km = 150000.0
+requires         = ["lgv_track"]
+requires_upgrade = "heavy_track"
+effects          = [{ kind = "line_speed", value = 400.0 }]
+name             = { fr = "Ligne à grande vitesse", en = "High-speed line" }
+description      = { fr = "Tracé à grands rayons, sans passages à niveau, réservé aux rames rapides : la ligne autorise 400 km/h." }
+
+[[upgrade]]
+id          = "maglev_guideway"
+era         = "future"
+cost_per_km = 300000.0
+requires    = ["superconducting_maglev"]
+effects     = [{ kind = "line_speed", value = 650.0, only = ["maglev"] }]
+name        = { fr = "Voie de guidage maglev", en = "Maglev guideway" }
+description = { fr = "Une voie en U garnie de bobines de sustentation et de propulsion, que seules les rames à sustentation magnétique empruntent." }
+
+[[upgrade]]
+id               = "vacuum_tube"
+era              = "future"
+cost_per_km = 1000000.0
+requires         = ["vacuum_tube"]
+requires_upgrade = "maglev_guideway"
+effects          = [{ kind = "line_speed", value = 1200.0, only = ["vactrain"] }]
+name             = { fr = "Tube à basse pression", en = "Low-pressure tube" }
+description      = { fr = "Concept spéculatif : un tube dont on a retiré presque tout l'air, pour supprimer la résistance aérodynamique." }

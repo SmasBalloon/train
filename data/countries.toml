@@ -1,37 +1,482 @@
-# Pays, gares, lignes et décor. La carte est abstraite : `pos`, `via` et
-# `path` sont des coordonnées schématiques (x vers la droite, y vers le bas),
-# sans rapport avec la géographie réelle. `length_km` fixe la distance de jeu.
+# Pays, gares, lignes et décor.
+#
+# La carte est schématique : `pos`, `via` et `path` sont des coordonnées
+# abstraites (x vers la droite, y vers le bas ; une unité vaut une dizaine de
+# kilomètres), sans prétention géographique. `length_km` fixe la distance de jeu.
+#
+# Pays :
+#   gauge_mm         écartement des voies ; s'il diffère de celui du pays de départ,
+#                    il faut la recherche d'écartement variable pour s'y installer
+#   build_cost       multiplicateur du coût de construction (relief)
+#   era              époque à partir de laquelle la concession est proposée
+#   concession_cost  prix de la concession
+#   demand           multiplicateur de demande par catégorie de trafic
+# La première gare d'un pays est sa capitale : un nouveau réseau y commence.
+#
+# Gare : `population` est un poids relatif de la ville, pas un recensement.
+# Ligne : `era` est l'époque à partir de laquelle elle peut être construite.
+#   Une ligne déclarée dans un pays peut aboutir dans un autre (ligne internationale).
+
+# ───────────────────────────── Royaume-Uni ─────────────────────────────
 
 [[country]]
 id         = "uk"
 name       = { fr = "Royaume-Uni", en = "United Kingdom" }
 gauge_mm   = 1435
 build_cost = 1.0
-terrain    = "rolling"
+terrain    = "vallonné"
+demand     = { commuter = 1.0, tourist = 0.7, business = 0.9, freight = 1.3 }
 
   [[country.station]]
-  id         = "stockton"
-  name       = "Stockton"
-  pos        = [26.0, 8.0]
+  id = "stockton"
+  name = "Stockton"
+  pos = [2.2, 0.7]
   population = 6000
 
   [[country.station]]
-  id         = "darlington"
-  name       = "Darlington"
-  pos        = [0.0, 0.0]
+  id = "darlington"
+  name = "Darlington"
+  pos = [0.0, 0.0]
   population = 6500
 
+  [[country.station]]
+  id = "york"
+  name = "York"
+  pos = [1.5, 7.0]
+  population = 12000
+
+  [[country.station]]
+  id = "leeds"
+  name = "Leeds"
+  pos = [-1.5, 9.5]
+  population = 20000
+
+  [[country.station]]
+  id = "manchester"
+  name = "Manchester"
+  pos = [-6.0, 11.0]
+  population = 30000
+
+  [[country.station]]
+  id = "liverpool"
+  name = "Liverpool"
+  pos = [-10.5, 11.5]
+  population = 30000
+
+  [[country.station]]
+  id = "london"
+  name = "Londres"
+  pos = [4.0, 30.0]
+  population = 80000
+
+  [[country.station]]
+  id = "edinburgh"
+  name = "Édimbourg"
+  pos = [-4.0, -19.0]
+  population = 25000
+
   [[country.line]]
-  id         = "stockton_darlington"
-  name       = "Stockton & Darlington"
-  from       = "stockton"
-  to         = "darlington"
-  length_km  = 19.0
-  via        = [[22.0, 4.0], [12.0, 4.0], [8.0, 0.0]]
+  id = "stockton_darlington"
+  name = "Stockton & Darlington"
+  from = "stockton"
+  to = "darlington"
+  length_km = 19.0
+  via = [[1.8, 0.3], [0.9, 0.3], [0.5, 0.0]]
   max_trains = 4
-  opened     = 1825
+  opened = 1825
+
+  [[country.line]]
+  id = "darlington_york"
+  name = "Darlington – York"
+  from = "darlington"
+  to = "york"
+  length_km = 70.0
+  via = [[0.3, 3.5]]
+  max_trains = 5
+  opened = 1841
+
+  [[country.line]]
+  id = "york_leeds"
+  name = "York – Leeds"
+  from = "york"
+  to = "leeds"
+  length_km = 40.0
+  max_trains = 5
+  opened = 1839
+
+  [[country.line]]
+  id = "leeds_manchester"
+  name = "Leeds – Manchester"
+  from = "leeds"
+  to = "manchester"
+  length_km = 65.0
+  max_trains = 6
+  opened = 1841
+
+  [[country.line]]
+  id = "liverpool_manchester"
+  name = "Liverpool & Manchester"
+  from = "manchester"
+  to = "liverpool"
+  length_km = 50.0
+  max_trains = 6
+  opened = 1830
+
+  [[country.line]]
+  id = "york_london"
+  name = "York – Londres"
+  from = "york"
+  to = "london"
+  length_km = 300.0
+  via = [[3.5, 18.0]]
+  max_trains = 8
+  opened = 1850
+
+  [[country.line]]
+  id = "manchester_london"
+  name = "Manchester – Londres"
+  from = "manchester"
+  to = "london"
+  length_km = 290.0
+  via = [[-3.0, 21.0]]
+  max_trains = 8
+  opened = 1838
+
+  [[country.line]]
+  id = "darlington_edinburgh"
+  name = "Darlington – Édimbourg"
+  from = "darlington"
+  to = "edinburgh"
+  length_km = 230.0
+  via = [[-0.5, -9.0]]
+  max_trains = 6
+  opened = 1846
 
   [[country.decor]]
   kind = "river"
   name = "Tees"
-  path = [[-6.0, 12.0], [2.0, 10.0], [9.0, 13.0], [17.0, 11.5], [23.0, 15.0], [32.0, 13.5]]
+  path = [[-1.5, 1.3], [0.2, 1.0], [1.0, 1.4], [1.8, 1.1], [2.6, 1.6], [3.6, 1.3]]
+
+  [[country.decor]]
+  kind = "border"
+  path = [[-7.0, -23.0], [0.0, -22.0], [2.0, -10.0], [5.0, -2.0], [5.0, 12.0], [9.0, 22.0], [9.0, 32.0], [0.0, 34.0], [-12.0, 32.0], [-9.0, 22.0], [-13.0, 14.0], [-12.0, 6.0], [-6.0, -6.0], [-9.0, -16.0], [-7.0, -23.0]]
+
+# ──────────────────────────────── France ────────────────────────────────
+
+[[country]]
+id              = "france"
+name            = { fr = "France", en = "France" }
+gauge_mm        = 1435
+build_cost      = 1.1
+terrain         = "plaines et massifs"
+concession_cost = 8000.0
+demand          = { commuter = 0.9, tourist = 1.3, business = 1.0, freight = 1.0 }
+
+  [[country.station]]
+  id = "paris"
+  name = "Paris"
+  pos = [11.0, 44.0]
+  population = 70000
+
+  [[country.station]]
+  id = "lille"
+  name = "Lille"
+  pos = [14.0, 36.0]
+  population = 20000
+
+  [[country.station]]
+  id = "lyon"
+  name = "Lyon"
+  pos = [19.0, 62.0]
+  population = 30000
+
+  [[country.station]]
+  id = "marseille"
+  name = "Marseille"
+  pos = [21.0, 76.0]
+  population = 28000
+
+  [[country.station]]
+  id = "bordeaux"
+  name = "Bordeaux"
+  pos = [-1.0, 66.0]
+  population = 22000
+
+  [[country.station]]
+  id = "strasbourg"
+  name = "Strasbourg"
+  pos = [30.0, 46.0]
+  population = 18000
+
+  [[country.line]]
+  id = "paris_lille"
+  name = "Paris – Lille"
+  from = "paris"
+  to = "lille"
+  length_km = 220.0
+  max_trains = 8
+  opened = 1846
+
+  [[country.line]]
+  id = "paris_lyon"
+  name = "Paris – Lyon"
+  from = "paris"
+  to = "lyon"
+  length_km = 430.0
+  via = [[15.0, 53.0]]
+  max_trains = 10
+  opened = 1854
+
+  [[country.line]]
+  id = "lyon_marseille"
+  name = "Lyon – Marseille"
+  from = "lyon"
+  to = "marseille"
+  length_km = 320.0
+  max_trains = 8
+  opened = 1856
+
+  [[country.line]]
+  id = "paris_bordeaux"
+  name = "Paris – Bordeaux"
+  from = "paris"
+  to = "bordeaux"
+  length_km = 500.0
+  via = [[4.0, 54.0]]
+  max_trains = 8
+  opened = 1853
+
+  [[country.line]]
+  id = "paris_strasbourg"
+  name = "Paris – Strasbourg"
+  from = "paris"
+  to = "strasbourg"
+  length_km = 400.0
+  max_trains = 8
+  opened = 1852
+
+  [[country.line]]
+  id = "london_paris"
+  name = "Londres – Paris"
+  from = "london"
+  to = "paris"
+  length_km = 460.0
+  via = [[9.0, 36.0]]
+  max_trains = 8
+  opened = 1936
+  era = "apogee"
+
+  [[country.decor]]
+  kind = "border"
+  path = [[8.0, 36.0], [16.0, 33.0], [24.0, 38.0], [33.0, 42.0], [32.0, 52.0], [27.0, 60.0], [28.0, 72.0], [24.0, 80.0], [12.0, 78.0], [2.0, 76.0], [-5.0, 70.0], [-4.0, 58.0], [-8.0, 48.0], [0.0, 44.0], [2.0, 38.0], [8.0, 36.0]]
+
+# ─────────────────────────────── Allemagne ───────────────────────────────
+
+[[country]]
+id              = "germany"
+name            = { fr = "Allemagne", en = "Germany" }
+gauge_mm        = 1435
+build_cost      = 1.0
+terrain         = "plaines"
+era             = "steam"
+concession_cost = 400000.0
+demand          = { commuter = 1.0, tourist = 0.8, business = 1.2, freight = 1.4 }
+
+  [[country.station]]
+  id = "berlin"
+  name = "Berlin"
+  pos = [58.0, 27.0]
+  population = 60000
+
+  [[country.station]]
+  id = "hamburg"
+  name = "Hambourg"
+  pos = [43.0, 20.0]
+  population = 35000
+
+  [[country.station]]
+  id = "cologne"
+  name = "Cologne"
+  pos = [29.0, 33.0]
+  population = 28000
+
+  [[country.station]]
+  id = "frankfurt"
+  name = "Francfort"
+  pos = [36.0, 39.0]
+  population = 26000
+
+  [[country.station]]
+  id = "munich"
+  name = "Munich"
+  pos = [47.0, 50.0]
+  population = 30000
+
+  [[country.line]]
+  id = "berlin_hamburg"
+  name = "Berlin – Hambourg"
+  from = "berlin"
+  to = "hamburg"
+  length_km = 290.0
+  max_trains = 8
+  opened = 1846
+
+  [[country.line]]
+  id = "cologne_berlin"
+  name = "Cologne – Berlin"
+  from = "berlin"
+  to = "cologne"
+  length_km = 480.0
+  via = [[44.0, 29.0]]
+  max_trains = 8
+  opened = 1847
+
+  [[country.line]]
+  id = "cologne_frankfurt"
+  name = "Cologne – Francfort"
+  from = "cologne"
+  to = "frankfurt"
+  length_km = 180.0
+  max_trains = 8
+  opened = 1859
+
+  [[country.line]]
+  id = "frankfurt_munich"
+  name = "Francfort – Munich"
+  from = "frankfurt"
+  to = "munich"
+  length_km = 300.0
+  max_trains = 8
+  opened = 1860
+
+  [[country.line]]
+  id = "lille_cologne"
+  name = "Lille – Cologne"
+  from = "lille"
+  to = "cologne"
+  length_km = 300.0
+  max_trains = 8
+  opened = 1846
+
+  [[country.line]]
+  id = "strasbourg_frankfurt"
+  name = "Strasbourg – Francfort"
+  from = "strasbourg"
+  to = "frankfurt"
+  length_km = 220.0
+  max_trains = 8
+  opened = 1861
+
+  [[country.decor]]
+  kind = "border"
+  path = [[26.0, 28.0], [34.0, 20.0], [42.0, 15.0], [52.0, 17.0], [63.0, 20.0], [65.0, 30.0], [58.0, 38.0], [56.0, 48.0], [50.0, 54.0], [40.0, 53.0], [34.0, 47.0], [33.0, 42.0], [26.0, 37.0], [26.0, 28.0]]
+
+# ──────────────────────────────── Espagne ────────────────────────────────
+
+[[country]]
+id              = "spain"
+name            = { fr = "Espagne", en = "Spain" }
+gauge_mm        = 1668
+build_cost      = 1.6
+terrain         = "montagneux"
+era             = "modern"
+concession_cost = 30000000.0
+demand          = { commuter = 0.8, tourist = 1.5, business = 0.9, freight = 0.9 }
+
+  [[country.station]]
+  id = "madrid"
+  name = "Madrid"
+  pos = [-12.0, 92.0]
+  population = 40000
+
+  [[country.station]]
+  id = "barcelona"
+  name = "Barcelone"
+  pos = [9.0, 87.0]
+  population = 38000
+
+  [[country.station]]
+  id = "seville"
+  name = "Séville"
+  pos = [-20.0, 106.0]
+  population = 20000
+
+  [[country.line]]
+  id = "madrid_barcelona"
+  name = "Madrid – Barcelone"
+  from = "madrid"
+  to = "barcelona"
+  length_km = 620.0
+  via = [[-2.0, 86.0]]
+  max_trains = 8
+  opened = 1860
+
+  [[country.line]]
+  id = "madrid_seville"
+  name = "Madrid – Séville"
+  from = "madrid"
+  to = "seville"
+  length_km = 470.0
+  max_trains = 8
+  opened = 1866
+
+  [[country.line]]
+  id = "bordeaux_madrid"
+  name = "Bordeaux – Madrid"
+  from = "bordeaux"
+  to = "madrid"
+  length_km = 700.0
+  via = [[-6.0, 78.0]]
+  max_trains = 8
+  opened = 1864
+
+  [[country.decor]]
+  kind = "border"
+  path = [[-26.0, 82.0], [-8.0, 79.0], [6.0, 80.0], [14.0, 84.0], [11.0, 92.0], [4.0, 100.0], [-6.0, 110.0], [-22.0, 112.0], [-28.0, 104.0], [-30.0, 92.0], [-26.0, 82.0]]
+
+# ──────────────────────────────── Russie ────────────────────────────────
+
+[[country]]
+id              = "russia"
+name            = { fr = "Russie", en = "Russia" }
+gauge_mm        = 1520
+build_cost      = 0.8
+terrain         = "grandes plaines"
+era             = "modern"
+concession_cost = 40000000.0
+demand          = { commuter = 0.8, tourist = 0.6, business = 0.9, freight = 1.7 }
+
+  [[country.station]]
+  id = "moscow"
+  name = "Moscou"
+  pos = [116.0, 22.0]
+  population = 60000
+
+  [[country.station]]
+  id = "petersburg"
+  name = "Saint-Pétersbourg"
+  pos = [98.0, 3.0]
+  population = 50000
+
+  [[country.line]]
+  id = "moscow_petersburg"
+  name = "Moscou – Saint-Pétersbourg"
+  from = "moscow"
+  to = "petersburg"
+  length_km = 650.0
+  max_trains = 10
+  opened = 1851
+
+  [[country.line]]
+  id = "berlin_moscow"
+  name = "Berlin – Moscou"
+  from = "berlin"
+  to = "moscow"
+  length_km = 1600.0
+  via = [[86.0, 27.0]]
+  max_trains = 8
+  opened = 1871
+
+  [[country.decor]]
+  kind = "border"
+  path = [[86.0, -4.0], [104.0, -6.0], [124.0, 2.0], [128.0, 20.0], [122.0, 32.0], [104.0, 34.0], [90.0, 30.0], [84.0, 16.0], [86.0, -4.0]]

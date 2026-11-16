@@ -1,36 +1,622 @@
-# Recherches. branch : traction | running_gear | braking | signalling | comfort
-# effects : liste de { kind = "...", value = ... }
-#   speed_mult, capacity_mult, fare_mult, demand_mult, track_wear_mult, auto_dispatch
+# Arbre de recherche.
+#
+# branch : traction | running_gear | braking | signalling | comfort
+# era    : époque à partir de laquelle la recherche est accessible
+# requires : recherches préalables
+# effects :
+#   multiplicateurs  speed_mult, capacity_mult, fare_mult, demand_mult,
+#                    track_wear_mult, fuel_mult, weight_mult
+#   comfort          bonus ajouté au confort (0 à 1)
+#   brake_add        décélération de freinage ajoutée, en m/s²
+#   signal_speed     vitesse maximale autorisée par la signalisation, en km/h
+#   line_capacity    trains supplémentaires admis sur chaque ligne
+#   auto_dispatch    départs automatiques (sans valeur)
+#   variable_gauge   accès aux pays d'un autre écartement (sans valeur)
+#   no_water_stop    plus d'arrêt pour faire de l'eau (sans valeur)
+
+# ───────────────────────── Pionniers (1825–1850) ─────────────────────────
 
 [[research]]
-id         = "hand_signals"
-branch     = "signalling"
-year       = 1830
-cost       = 500.0
-duration_h = 4.0          # heures de jeu
-effects    = [{ kind = "auto_dispatch" }]
-name        = { fr = "Signaleurs de voie", en = "Railway policemen" }
-description = { fr = "Des agents postés le long de la ligne donnent le départ par signaux à bras et drapeaux. Les trains partent seuls dès qu'ils sont pleins, ou après une attente maximale.", en = "Men posted along the line give the right of way with hand and flag signals. Trains depart on their own." }
+id = "hand_signals"
+branch = "signalling"
+era = "pioneers"
+year = 1830
+cost = 500.0
+duration_h = 4.0
+effects = [{ kind = "auto_dispatch" }, { kind = "signal_speed", value = 60.0 }]
+name = { fr = "Signaleurs de voie", en = "Railway policemen" }
+description = { fr = "Des agents postés le long de la ligne donnent le départ par signaux à bras et drapeaux, en laissant un intervalle de temps entre deux trains. Les trains partent seuls à l'heure prévue, ou dès qu'ils sont pleins." }
 
 [[research]]
-id         = "multitubular_boiler"
-branch     = "traction"
-year       = 1829
-cost       = 600.0
+id = "multitubular_boiler"
+branch = "traction"
+era = "pioneers"
+year = 1829
+cost = 600.0
 duration_h = 6.0
-name        = { fr = "Chaudière multitubulaire", en = "Multitubular boiler" }
-description = { fr = "Des dizaines de tubes traversent la chaudière et multiplient la surface de chauffe : la vapeur est produite bien plus vite. Ouvre la voie à la Rocket.", en = "Dozens of fire tubes multiply the heating surface, producing steam far faster. Paves the way for Rocket." }
+name = { fr = "Chaudière multitubulaire", en = "Multitubular boiler" }
+description = { fr = "Des dizaines de tubes traversent la chaudière et multiplient la surface de chauffe : la vapeur est produite bien plus vite. Idée de Marc Seguin en France et d'Henry Booth en Angleterre, elle ouvre la voie à la Rocket." }
 
 [[research]]
-id         = "covered_carriages"
-branch     = "comfort"
-year       = 1830
-cost       = 900.0
+id = "covered_carriages"
+branch = "comfort"
+era = "pioneers"
+year = 1830
+cost = 900.0
 duration_h = 8.0
-effects    = [
-  { kind = "fare_mult", value = 1.20 },
-  { kind = "demand_mult", value = 1.15 },
-  { kind = "speed_mult", value = 0.95 },
-]
-name        = { fr = "Voitures fermées", en = "Covered carriages" }
-description = { fr = "Des voitures inspirées des diligences, avec toit et banquettes, remplacent les wagons découverts. Les voyageurs paient plus cher et viennent plus nombreux, mais les trains s'alourdissent.", en = "Coaches modelled on stagecoaches replace open wagons. Passengers pay more and come in greater numbers, but trains get heavier." }
+effects = [{ kind = "fare_mult", value = 1.20 }, { kind = "demand_mult", value = 1.15 }, { kind = "comfort", value = 0.25 }, { kind = "weight_mult", value = 1.10 }]
+name = { fr = "Voitures fermées", en = "Covered carriages" }
+description = { fr = "Des voitures inspirées des diligences, avec toit et banquettes, remplacent les wagons découverts. Les voyageurs paient plus cher et viennent plus nombreux, mais les trains s'alourdissent et démarrent moins vite." }
+
+[[research]]
+id = "hand_brakes"
+branch = "braking"
+era = "pioneers"
+year = 1835
+cost = 1500.0
+duration_h = 3.0
+effects = [{ kind = "brake_add", value = 0.08 }]
+name = { fr = "Serre-freins", en = "Brakesmen" }
+description = { fr = "Un agent par voiture serre un frein à vis au coup de sifflet du mécanicien. C'est lent et inégal, mais le train s'arrête plus court, donc peut rouler plus longtemps à pleine vitesse." }
+
+[[research]]
+id = "wrought_iron_rails"
+branch = "running_gear"
+era = "pioneers"
+year = 1832
+cost = 3000.0
+duration_h = 6.0
+effects = [{ kind = "track_wear_mult", value = 0.80 }]
+name = { fr = "Rails en fer laminé", en = "Wrought iron rails" }
+description = { fr = "Les rails en fer laminé, plus longs et moins cassants que la fonte, tiennent bien mieux sous le poids des machines." }
+
+[[research]]
+id = "electric_telegraph"
+branch = "signalling"
+era = "pioneers"
+year = 1837
+cost = 8000.0
+duration_h = 8.0
+requires = ["hand_signals"]
+effects = [{ kind = "signal_speed", value = 100.0 }, { kind = "line_capacity", value = 1 }]
+name = { fr = "Télégraphe électrique", en = "Electric telegraph" }
+description = { fr = "Le télégraphe de Cooke et Wheatstone, installé le long des voies dès 1837, permet à une gare de savoir que la voie est libre avant d'y engager un train. On peut faire rouler plus de trains, plus vite." }
+
+[[research]]
+id = "variable_expansion"
+branch = "traction"
+era = "pioneers"
+year = 1842
+cost = 12000.0
+duration_h = 8.0
+requires = ["multitubular_boiler"]
+effects = [{ kind = "fuel_mult", value = 0.85 }]
+name = { fr = "Distribution à détente variable", en = "Variable expansion valve gear" }
+description = { fr = "La coulisse de Stephenson permet de régler l'admission de vapeur en marche et de la laisser se détendre dans le cylindre : la même vapeur travaille plus, on brûle moins de charbon." }
+
+# ───────────────────── Âge d'or de la vapeur (1850–1930) ─────────────────────
+
+[[research]]
+id = "bessemer_steel"
+branch = "running_gear"
+era = "steam"
+year = 1857
+cost = 180000.0
+duration_h = 8.0
+requires = ["wrought_iron_rails"]
+name = { fr = "Acier Bessemer", en = "Bessemer steel" }
+description = { fr = "Le convertisseur de Henry Bessemer (1856) produit de l'acier en masse. Un rail en acier dure plusieurs fois plus longtemps qu'un rail en fer. Débloque l'amélioration « Rails en acier »." }
+
+[[research]]
+id = "bogie_carriages"
+branch = "running_gear"
+era = "steam"
+year = 1874
+cost = 270000.0
+duration_h = 10.0
+effects = [{ kind = "track_wear_mult", value = 0.85 }, { kind = "comfort", value = 0.05 }, { kind = "weight_mult", value = 1.05 }]
+name = { fr = "Voitures à bogies", en = "Bogie carriages" }
+description = { fr = "Au lieu d'essieux fixés à la caisse, deux chariots pivotants guident la voiture dans les courbes. Les voitures peuvent s'allonger, roulent plus doux et ménagent la voie." }
+
+[[research]]
+id = "air_brake"
+branch = "braking"
+era = "steam"
+year = 1869
+cost = 240000.0
+duration_h = 10.0
+requires = ["hand_brakes"]
+effects = [{ kind = "brake_add", value = 0.25 }]
+name = { fr = "Frein à air comprimé", en = "Air brake" }
+description = { fr = "Le frein de George Westinghouse (1869) est commandé par le mécanicien sur tout le train à la fois, et se serre de lui-même si le train se coupe. Freiner court permet de rouler vite plus longtemps." }
+
+[[research]]
+id = "semaphore_block"
+branch = "signalling"
+era = "steam"
+year = 1856
+cost = 300000.0
+duration_h = 12.0
+requires = ["electric_telegraph"]
+effects = [{ kind = "signal_speed", value = 130.0 }, { kind = "line_capacity", value = 1 }]
+name = { fr = "Block et sémaphores", en = "Block system and semaphores" }
+description = { fr = "La ligne est découpée en cantons : un seul train par canton, protégé par un sémaphore. Avec les enclenchements, qui interdisent les manœuvres contradictoires, c'est la base de la sécurité ferroviaire." }
+
+[[research]]
+id = "compound_engine"
+branch = "traction"
+era = "steam"
+year = 1876
+cost = 360000.0
+duration_h = 12.0
+requires = ["variable_expansion"]
+effects = [{ kind = "fuel_mult", value = 0.85 }]
+name = { fr = "Machine compound", en = "Compound engine" }
+description = { fr = "La vapeur travaille deux fois : d'abord dans des cylindres à haute pression, puis dans des cylindres à basse pression. Anatole Mallet l'applique aux locomotives en 1876, Alfred de Glehn en tire les grandes machines d'express françaises." }
+
+[[research]]
+id = "water_troughs"
+branch = "traction"
+era = "steam"
+year = 1860
+cost = 210000.0
+duration_h = 8.0
+effects = [{ kind = "no_water_stop" }]
+name = { fr = "Prise d'eau en marche", en = "Water troughs" }
+description = { fr = "Une rigole pleine d'eau entre les rails, une écope sous le tender : la machine fait le plein sans s'arrêter. Inventée par John Ramsbottom en 1860. Les trains à vapeur n'ont plus à attendre en gare pour faire de l'eau." }
+
+[[research]]
+id = "superheater"
+branch = "traction"
+era = "steam"
+year = 1898
+cost = 540000.0
+duration_h = 14.0
+requires = ["compound_engine"]
+effects = [{ kind = "fuel_mult", value = 0.85 }, { kind = "speed_mult", value = 1.05 }]
+name = { fr = "Surchauffe", en = "Superheating" }
+description = { fr = "Le surchauffeur de Wilhelm Schmidt réchauffe la vapeur après sa sortie de la chaudière : sèche, elle ne se condense plus dans les cylindres. Le gain en charbon et en eau est considérable." }
+
+[[research]]
+id = "sleeping_cars"
+branch = "comfort"
+era = "steam"
+year = 1872
+cost = 270000.0
+duration_h = 10.0
+requires = ["covered_carriages"]
+effects = [{ kind = "fare_mult", value = 1.25 }, { kind = "comfort", value = 0.15 }, { kind = "capacity_mult", value = 0.90 }, { kind = "weight_mult", value = 1.10 }]
+name = { fr = "Voitures-lits", en = "Sleeping cars" }
+description = { fr = "George Pullman aux États-Unis, puis Georges Nagelmackers en Europe, transforment la voiture en hôtel roulant. Un lit prend la place de plusieurs sièges : moins de places, des trains plus lourds, mais des billets bien plus chers." }
+
+[[research]]
+id = "dining_cars"
+branch = "comfort"
+era = "steam"
+year = 1880
+cost = 330000.0
+duration_h = 8.0
+requires = ["sleeping_cars"]
+effects = [{ kind = "fare_mult", value = 1.10 }, { kind = "comfort", value = 0.05 }]
+name = { fr = "Voitures-restaurants", en = "Dining cars" }
+description = { fr = "On ne s'arrête plus vingt minutes au buffet : on dîne à bord, en roulant." }
+
+[[research]]
+id = "heating_lighting"
+branch = "comfort"
+era = "steam"
+year = 1890
+cost = 210000.0
+duration_h = 8.0
+effects = [{ kind = "comfort", value = 0.10 }, { kind = "demand_mult", value = 1.10 }]
+name = { fr = "Chauffage et éclairage", en = "Heating and lighting" }
+description = { fr = "Le chauffage à la vapeur de la locomotive remplace les bouillottes, et l'éclairage au gaz puis électrique les lampes à huile. Voyager l'hiver et la nuit devient supportable." }
+
+# ───────────────────── Apogée de la vapeur (1930–1950) ─────────────────────
+
+[[research]]
+id = "streamlining"
+branch = "traction"
+era = "apogee"
+year = 1934
+cost = 1500000.0
+duration_h = 14.0
+requires = ["superheater"]
+effects = [{ kind = "speed_mult", value = 1.08 }, { kind = "fuel_mult", value = 0.95 }]
+name = { fr = "Carénage aérodynamique", en = "Streamlining" }
+description = { fr = "Au-delà de 120 km/h, l'air devient le premier ennemi. Les carénages étudiés en soufflerie réduisent la traînée et dégagent la fumée de la vue du mécanicien." }
+
+[[research]]
+id = "kylchap_exhaust"
+branch = "traction"
+era = "apogee"
+year = 1926
+cost = 1200000.0
+duration_h = 12.0
+requires = ["superheater"]
+effects = [{ kind = "fuel_mult", value = 0.93 }]
+name = { fr = "Échappement Kylchap", en = "Kylchap exhaust" }
+description = { fr = "L'échappement mis au point par André Chapelon à partir des travaux du Finlandais Kyösti Kylälä aspire mieux les gaz du foyer avec moins de contre-pression. La machine respire, et développe plus de puissance avec moins de charbon." }
+
+[[research]]
+id = "welded_rails"
+branch = "running_gear"
+era = "apogee"
+year = 1935
+cost = 1800000.0
+duration_h = 14.0
+requires = ["bessemer_steel"]
+name = { fr = "Longs rails soudés", en = "Continuous welded rail" }
+description = { fr = "Supprimer les joints entre les rails, c'est supprimer les chocs qui fatiguent la voie et les essieux. Débloque l'amélioration « Voie lourde soudée »." }
+
+[[research]]
+id = "roller_bearings"
+branch = "running_gear"
+era = "apogee"
+year = 1930
+cost = 990000.0
+duration_h = 10.0
+effects = [{ kind = "track_wear_mult", value = 0.90 }, { kind = "fuel_mult", value = 0.95 }]
+name = { fr = "Roulements à rouleaux", en = "Roller bearings" }
+description = { fr = "Les roulements à rouleaux remplacent les coussinets lisses : moins de frottement, moins d'échauffement, moins d'entretien." }
+
+[[research]]
+id = "electropneumatic_brake"
+branch = "braking"
+era = "apogee"
+year = 1930
+cost = 1400000.0
+duration_h = 12.0
+requires = ["air_brake"]
+effects = [{ kind = "brake_add", value = 0.20 }]
+name = { fr = "Frein électropneumatique", en = "Electro-pneumatic brake" }
+description = { fr = "Une commande électrique déclenche le freinage au même instant sur toutes les voitures, au lieu d'attendre que la dépression parcoure la conduite. Le train s'arrête plus court et sans à-coups." }
+
+[[research]]
+id = "automatic_block"
+branch = "signalling"
+era = "apogee"
+year = 1930
+cost = 2000000.0
+duration_h = 16.0
+requires = ["semaphore_block"]
+effects = [{ kind = "signal_speed", value = 160.0 }, { kind = "line_capacity", value = 1 }]
+name = { fr = "Block automatique lumineux", en = "Automatic block signalling" }
+description = { fr = "Le train signale lui-même sa présence en court-circuitant un courant qui passe dans les rails : les signaux lumineux se ferment derrière lui sans intervention humaine. Les cantons raccourcissent, les trains se suivent de plus près." }
+
+[[research]]
+id = "cab_repeater"
+branch = "signalling"
+era = "apogee"
+year = 1936
+cost = 2200000.0
+duration_h = 14.0
+requires = ["automatic_block"]
+effects = [{ kind = "signal_speed", value = 220.0 }]
+name = { fr = "Répétition des signaux en cabine", en = "Cab signal repeater" }
+description = { fr = "Le « crocodile », contact métallique posé entre les rails, ou l'AWS britannique, répètent en cabine l'indication du signal franchi et exigent que le mécanicien l'acquitte. On ose alors rouler plus vite." }
+
+[[research]]
+id = "air_conditioning"
+branch = "comfort"
+era = "apogee"
+year = 1932
+cost = 1100000.0
+duration_h = 10.0
+effects = [{ kind = "comfort", value = 0.10 }, { kind = "fare_mult", value = 1.10 }, { kind = "fuel_mult", value = 1.04 }]
+name = { fr = "Air conditionné", en = "Air conditioning" }
+description = { fr = "Apparu sur les grands trains américains au début des années 1930. Les voyageurs l'apprécient et le paient ; la machine, elle, doit fournir l'énergie." }
+
+# ─────────────────── Diesel et électrification (1950–1964) ───────────────────
+
+[[research]]
+id = "diesel_electric"
+branch = "traction"
+era = "modern"
+year = 1950
+cost = 7400000.0
+duration_h = 14.0
+name = { fr = "Traction diesel-électrique", en = "Diesel-electric traction" }
+description = { fr = "Un moteur diesel entraîne une génératrice qui alimente des moteurs électriques sur les essieux. Ni eau, ni charbon, ni caténaire : la machine est prête en quelques minutes. Débloque la Deltic." }
+
+[[research]]
+id = "electric_traction"
+branch = "traction"
+era = "modern"
+year = 1950
+cost = 9800000.0
+duration_h = 16.0
+name = { fr = "Traction électrique", en = "Electric traction" }
+description = { fr = "L'énergie n'est plus produite à bord mais captée sur un fil : la locomotive n'emporte ni combustible ni chaudière, et dispose d'une puissance que la vapeur n'a jamais eue. Débloque la caténaire, la BB 9004 et la CC 7107." }
+
+[[research]]
+id = "ac_25kv"
+branch = "traction"
+era = "modern"
+year = 1954
+cost = 12000000.0
+duration_h = 14.0
+requires = ["electric_traction"]
+effects = [{ kind = "fuel_mult", value = 0.85 }]
+name = { fr = "Courant industriel 25 kV", en = "25 kV AC electrification" }
+description = { fr = "Alimenter les trains en courant alternatif à 25 000 volts et 50 hertz, celui du réseau général : la caténaire est plus légère, les sous-stations plus espacées, les pertes plus faibles. Essayé en Savoie, puis sur Valenciennes-Thionville en 1954." }
+
+[[research]]
+id = "motor_bogies"
+branch = "running_gear"
+era = "modern"
+year = 1952
+cost = 6000000.0
+duration_h = 12.0
+effects = [{ kind = "track_wear_mult", value = 0.90 }, { kind = "speed_mult", value = 1.05 }]
+name = { fr = "Bogies moteurs stables", en = "Stable motor bogies" }
+description = { fr = "Au-delà de 150 km/h, un bogie mal amorti se met à osciller d'un rail à l'autre. Amortisseurs et rappels élastiques le stabilisent : la machine roule plus vite en fatiguant moins la voie." }
+
+[[research]]
+id = "variable_gauge"
+branch = "running_gear"
+era = "modern"
+year = 1968
+cost = 8800000.0
+duration_h = 12.0
+effects = [{ kind = "variable_gauge" }]
+name = { fr = "Écartement variable", en = "Variable gauge" }
+description = { fr = "En Espagne, les rails sont écartés de 1 668 mm ; en Russie, de 1 520 mm ; ailleurs en Europe, de 1 435 mm. Longtemps, il a fallu changer de train à la frontière, ou soulever les voitures pour changer leurs bogies. Les essieux à écartement variable, mis en service par Talgo en 1968, s'ajustent en roulant au pas dans une installation de changement. Indispensable pour obtenir une concession dans un pays à l'écartement différent." }
+
+[[research]]
+id = "disc_brakes"
+branch = "braking"
+era = "modern"
+year = 1955
+cost = 7700000.0
+duration_h = 12.0
+requires = ["electropneumatic_brake"]
+effects = [{ kind = "brake_add", value = 0.20 }]
+name = { fr = "Freins à disques", en = "Disc brakes" }
+description = { fr = "Le sabot qui frottait sur la roue est remplacé par des garnitures serrant un disque calé sur l'essieu : le freinage est plus puissant, plus régulier, et n'abîme plus les roues." }
+
+[[research]]
+id = "rheostatic_brake"
+branch = "braking"
+era = "modern"
+year = 1956
+cost = 7000000.0
+duration_h = 10.0
+requires = ["electric_traction"]
+effects = [{ kind = "brake_add", value = 0.10 }, { kind = "track_wear_mult", value = 0.95 }]
+name = { fr = "Freinage rhéostatique", en = "Rheostatic braking" }
+description = { fr = "Les moteurs de traction fonctionnent en génératrices et dissipent l'énergie du train dans des résistances. Un frein sans usure, précieux dans les longues descentes." }
+
+[[research]]
+id = "ctc"
+branch = "signalling"
+era = "modern"
+year = 1950
+cost = 8800000.0
+duration_h = 14.0
+requires = ["automatic_block"]
+effects = [{ kind = "line_capacity", value = 1 }]
+name = { fr = "Commande centralisée", en = "Centralised traffic control" }
+description = { fr = "Un seul poste commande à distance les aiguilles et les signaux de toute une ligne. Le régulateur voit tous les trains sur un tableau et peut en faire passer davantage." }
+
+[[research]]
+id = "tee_comfort"
+branch = "comfort"
+era = "modern"
+year = 1957
+cost = 6300000.0
+duration_h = 10.0
+effects = [{ kind = "fare_mult", value = 1.20 }, { kind = "comfort", value = 0.10 }, { kind = "capacity_mult", value = 0.95 }]
+name = { fr = "Trains d'affaires de première classe", en = "First-class business trains" }
+description = { fr = "Sur le modèle des Trans Europ Express lancés en 1957 : uniquement des premières classes, insonorisation, restauration à la place. Moins de sièges, mais une clientèle d'affaires qui paie le prix." }
+
+# ───────────────────────── Grande vitesse (1964–2020) ─────────────────────────
+
+[[research]]
+id = "cab_signalling"
+branch = "signalling"
+era = "high_speed"
+year = 1964
+cost = 20000000.0
+duration_h = 18.0
+requires = ["cab_repeater", "ctc"]
+effects = [{ kind = "signal_speed", value = 320.0 }]
+name = { fr = "Signalisation en cabine", en = "Cab signalling" }
+description = { fr = "À 300 km/h, un signal au bord de la voie défile en une fraction de seconde. La vitesse autorisée est transmise par les rails et affichée en cabine, et le train freine seul si elle est dépassée : ATC du Shinkansen en 1964, TVM du TGV en 1981. Sans elle, pas de grande vitesse." }
+
+[[research]]
+id = "distributed_traction"
+branch = "traction"
+era = "high_speed"
+year = 1964
+cost = 16000000.0
+duration_h = 16.0
+requires = ["ac_25kv"]
+name = { fr = "Motorisation répartie", en = "Distributed traction" }
+description = { fr = "Plus de locomotive : des moteurs sous toutes les voitures. Le poids par essieu baisse, l'adhérence augmente, la voie souffre moins. Débloque le Shinkansen série 0, avec la signalisation en cabine." }
+
+[[research]]
+id = "articulated_trainset"
+branch = "running_gear"
+era = "high_speed"
+year = 1972
+cost = 24000000.0
+duration_h = 16.0
+requires = ["motor_bogies"]
+effects = [{ kind = "track_wear_mult", value = 0.90 }]
+name = { fr = "Rame articulée", en = "Articulated trainset" }
+description = { fr = "Deux caisses voisines reposent sur un même bogie placé entre elles. La rame est plus légère, plus basse, plus stable, et reste d'un seul tenant en cas de déraillement. Débloque le TGV Sud-Est, avec la signalisation en cabine." }
+
+[[research]]
+id = "lgv_track"
+branch = "running_gear"
+era = "high_speed"
+year = 1976
+cost = 28000000.0
+duration_h = 18.0
+requires = ["welded_rails"]
+name = { fr = "Tracé de ligne à grande vitesse", en = "High-speed line design" }
+description = { fr = "Des courbes de plusieurs kilomètres de rayon, aucun passage à niveau, des rampes fortes que les rames puissantes avalent sans peine. Débloque l'amélioration « Ligne à grande vitesse »." }
+
+[[research]]
+id = "synchronous_motors"
+branch = "traction"
+era = "high_speed"
+year = 1988
+cost = 39000000.0
+duration_h = 16.0
+requires = ["distributed_traction"]
+effects = [{ kind = "speed_mult", value = 1.05 }, { kind = "fuel_mult", value = 0.90 }]
+name = { fr = "Moteurs synchrones", en = "Synchronous motors" }
+description = { fr = "Sans collecteur ni balais, les moteurs synchrones puis asynchrones sont plus légers et plus puissants à masse égale, et demandent beaucoup moins d'entretien." }
+
+[[research]]
+id = "regenerative_brake"
+branch = "braking"
+era = "high_speed"
+year = 1985
+cost = 22000000.0
+duration_h = 14.0
+requires = ["rheostatic_brake"]
+effects = [{ kind = "brake_add", value = 0.15 }, { kind = "fuel_mult", value = 0.90 }]
+name = { fr = "Freinage par récupération", en = "Regenerative braking" }
+description = { fr = "Au freinage, les moteurs renvoient du courant dans la caténaire au lieu de le dissiper en chaleur : un train qui freine alimente celui qui démarre." }
+
+[[research]]
+id = "eddy_current_brake"
+branch = "braking"
+era = "high_speed"
+year = 1995
+cost = 36000000.0
+duration_h = 14.0
+requires = ["disc_brakes"]
+effects = [{ kind = "brake_add", value = 0.15 }]
+name = { fr = "Frein à courants de Foucault", en = "Eddy current brake" }
+description = { fr = "Des électroaimants suspendus au-dessus du rail y induisent des courants qui freinent le train sans aucun contact, donc sans usure et sans dépendre de l'adhérence." }
+
+[[research]]
+id = "etcs"
+branch = "signalling"
+era = "high_speed"
+year = 2000
+cost = 50000000.0
+duration_h = 18.0
+requires = ["cab_signalling"]
+effects = [{ kind = "signal_speed", value = 450.0 }, { kind = "line_capacity", value = 1 }]
+name = { fr = "Signalisation européenne ETCS", en = "ETCS signalling" }
+description = { fr = "Un système commun de contrôle des trains : les autorisations de mouvement sont envoyées par radio, et l'ordinateur de bord calcule en permanence la courbe de freinage à respecter." }
+
+[[research]]
+id = "slab_track"
+branch = "running_gear"
+era = "high_speed"
+year = 1990
+cost = 45000000.0
+duration_h = 16.0
+requires = ["lgv_track"]
+effects = [{ kind = "track_wear_mult", value = 0.70 }]
+name = { fr = "Voie sur dalle", en = "Slab track" }
+description = { fr = "Les rails sont fixés sur une dalle de béton au lieu de traverses posées sur du ballast. Plus chère à construire, la voie ne bouge presque plus." }
+
+[[research]]
+id = "pressure_sealing"
+branch = "comfort"
+era = "high_speed"
+year = 1989
+cost = 18000000.0
+duration_h = 12.0
+effects = [{ kind = "comfort", value = 0.10 }, { kind = "weight_mult", value = 1.03 }]
+name = { fr = "Étanchéité aux ondes de pression", en = "Pressure sealing" }
+description = { fr = "À grande vitesse, l'entrée dans un tunnel ou le croisement d'une autre rame provoque un coup de pression douloureux pour les oreilles. Des caisses étanches le suppriment, au prix d'un peu de masse." }
+
+[[research]]
+id = "onboard_services"
+branch = "comfort"
+era = "high_speed"
+year = 2005
+cost = 25000000.0
+duration_h = 12.0
+effects = [{ kind = "fare_mult", value = 1.10 }, { kind = "demand_mult", value = 1.10 }]
+name = { fr = "Services à bord", en = "On-board services" }
+description = { fr = "Prises électriques, réseau sans fil, espaces de travail et information en temps réel : le temps de trajet devient du temps utile, ce que l'avion offre mal." }
+
+[[research]]
+id = "v150_program"
+branch = "traction"
+era = "high_speed"
+year = 2007
+cost = 120000000.0
+duration_h = 20.0
+requires = ["synchronous_motors", "articulated_trainset", "etcs"]
+name = { fr = "Programme d'essais à très grande vitesse", en = "Very-high-speed test programme" }
+description = { fr = "Une rame préparée pour un seul but : aller le plus vite possible sur rails, afin de mesurer ce que deviennent la voie, la caténaire et l'aérodynamique. Débloque la rame V150." }
+
+# ────────────────────────────── Futur (2020– ) ──────────────────────────────
+
+[[research]]
+id = "superconducting_maglev"
+branch = "traction"
+era = "future"
+year = 2015
+cost = 220000000.0
+duration_h = 20.0
+requires = ["synchronous_motors"]
+name = { fr = "Sustentation magnétique supraconductrice", en = "Superconducting maglev" }
+description = { fr = "Des aimants supraconducteurs refroidis à l'hélium liquide soulèvent et guident la rame au-dessus de bobines placées dans la voie, tandis qu'un moteur linéaire la propulse. Plus de roues, plus d'adhérence à ménager. Débloque la voie de guidage et le maglev série L0." }
+
+[[research]]
+id = "aero_brakes"
+branch = "braking"
+era = "future"
+year = 2015
+cost = 150000000.0
+duration_h = 14.0
+requires = ["eddy_current_brake"]
+effects = [{ kind = "brake_add", value = 0.20 }]
+name = { fr = "Aérofreins", en = "Aerodynamic brakes" }
+description = { fr = "Des panneaux se dressent sur le toit pour freiner par la résistance de l'air, comme sur un avion : d'autant plus efficaces que la vitesse est grande." }
+
+[[research]]
+id = "moving_block"
+branch = "signalling"
+era = "future"
+year = 2025
+cost = 200000000.0
+duration_h = 18.0
+requires = ["etcs"]
+effects = [{ kind = "signal_speed", value = 1200.0 }, { kind = "line_capacity", value = 2 }]
+name = { fr = "Canton mobile", en = "Moving block" }
+description = { fr = "Plus de cantons fixes : chaque train transmet sa position exacte et reçoit une distance de sécurité calculée en continu derrière le précédent. La ligne accepte bien plus de trains." }
+
+[[research]]
+id = "active_suspension"
+branch = "running_gear"
+era = "future"
+year = 2025
+cost = 140000000.0
+duration_h = 14.0
+effects = [{ kind = "track_wear_mult", value = 0.80 }, { kind = "comfort", value = 0.05 }]
+name = { fr = "Suspension active", en = "Active suspension" }
+description = { fr = "Des vérins pilotés par ordinateur compensent en temps réel les défauts de la voie et les mouvements de caisse." }
+
+[[research]]
+id = "private_cabins"
+branch = "comfort"
+era = "future"
+year = 2030
+cost = 160000000.0
+duration_h = 12.0
+effects = [{ kind = "fare_mult", value = 1.30 }, { kind = "comfort", value = 0.10 }, { kind = "capacity_mult", value = 0.85 }]
+name = { fr = "Cabines individuelles", en = "Private cabins" }
+description = { fr = "Des compartiments fermés pour travailler ou dormir, comme une réinvention des voitures-lits. Moins de places, vendues bien plus cher." }
+
+[[research]]
+id = "vacuum_tube"
+branch = "traction"
+era = "future"
+year = 2050
+cost = 1500000000.0
+duration_h = 24.0
+requires = ["superconducting_maglev", "moving_block"]
+name = { fr = "Tube à basse pression (spéculatif)", en = "Low-pressure tube (speculative)" }
+description = { fr = "Recherche spéculative : faire circuler des capsules à sustentation magnétique dans un tube dont on a retiré presque tout l'air. Aucune ligne de ce type n'existe. Débloque le tube et la capsule concept." }

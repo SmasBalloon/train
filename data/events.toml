@@ -1,0 +1,148 @@
+# Événements historiques jouables. Un événement se déclenche quand toutes les
+# conditions de `trigger` sont réunies ; le joueur choisit alors une option.
+#
+# trigger : era (époque atteinte), passengers (voyageurs transportés),
+#           research (recherches terminées), owns (une de ces machines en service)
+# effets d'un choix :
+#   { kind = "money", value = 500.0 }              négatif : somme à payer
+#   { kind = "grant_research", target = "..." }    recherche offerte
+#   { kind = "satisfaction", value = 0.1 }         toutes les clientèles, ou class = "tourist"
+#   { kind = "track_condition", value = -0.4 }     état de la voie de toutes les lignes
+
+[[event]]
+id    = "rainhill_trials"
+year  = 1829
+title = { fr = "Le concours de Rainhill" }
+text  = { fr = "Octobre 1829. Les directeurs du Liverpool & Manchester Railway hésitent encore entre locomotives et machines fixes tirant des câbles. Ils offrent 500 livres à la meilleure locomotive : elle devra parcourir vingt allers-retours sur un tronçon plat à Rainhill, en tirant trois fois son poids. Cinq concurrents sont inscrits, dont le Cycloped, mû par un cheval sur un tapis roulant. Tu peux engager ta compagnie derrière l'une des trois favorites." }
+[event.trigger]
+era        = "pioneers"
+passengers = 250
+
+  [[event.choice]]
+  label   = { fr = "La Rocket de George et Robert Stephenson" }
+  outcome = { fr = "Seule à terminer l'épreuve, la Rocket l'emporte à près de 48 km/h grâce à sa chaudière multitubulaire. Tu touches ta part du prix, et tes ingénieurs repartent avec les plans de la chaudière." }
+  effects = [{ kind = "money", value = 500.0 }, { kind = "grant_research", target = "multitubular_boiler" }]
+
+  [[event.choice]]
+  label   = { fr = "La Novelty de Braithwaite et Ericsson" }
+  outcome = { fr = "Légère et élégante, la Novelty file à plus de 45 km/h et enchante la foule. Mais ses soufflets et sa chaudière lâchent à plusieurs reprises : elle abandonne. Le public, lui, n'a d'yeux que pour le chemin de fer." }
+  effects = [{ kind = "satisfaction", value = 0.08 }]
+
+  [[event.choice]]
+  label   = { fr = "La Sans Pareil de Timothy Hackworth" }
+  outcome = { fr = "Robuste mais trop lourde pour le règlement, la Sans Pareil brûle un charbon fou, puis un cylindre se fend : elle abandonne. Le Liverpool & Manchester la rachètera tout de même, et toi, tu récupères ta mise." }
+  effects = [{ kind = "money", value = 100.0 }]
+
+[[event]]
+id    = "orient_express"
+year  = 1883
+title = { fr = "L'Orient-Express" }
+text  = { fr = "Le 4 octobre 1883, le premier Orient-Express de la Compagnie internationale des wagons-lits de Georges Nagelmackers quitte Paris pour Constantinople : voitures-lits, voiture-restaurant, boiseries et cristal. Tes propres voitures-lits sont prêtes. Comment lances-tu ton train de luxe ?" }
+[event.trigger]
+era      = "steam"
+research = ["sleeping_cars"]
+
+  [[event.choice]]
+  label   = { fr = "En grande pompe : presse, ministres et dîner à bord (£ 150 000)" }
+  outcome = { fr = "Les journaux ne parlent que de ton train. La clientèle fortunée afflue, et le voyage devient une fin en soi." }
+  effects = [{ kind = "money", value = -150000.0 }, { kind = "satisfaction", class = "tourist", value = 0.30 }, { kind = "satisfaction", class = "business", value = 0.20 }]
+
+  [[event.choice]]
+  label   = { fr = "Sobrement : le service parlera de lui-même" }
+  outcome = { fr = "Le train de luxe entre en service sans cérémonie. Les habitués l'adoptent peu à peu." }
+  effects = [{ kind = "satisfaction", class = "tourist", value = 0.08 }]
+
+[[event]]
+id    = "mallard_record"
+year  = 1938
+title = { fr = "Le record de la Mallard" }
+text  = { fr = "Juillet 1938. Officiellement, il s'agit d'essais de freinage. En réalité, tes ingénieurs veulent reprendre aux Allemands le record de vitesse à vapeur. La Mallard est neuve, la longue descente est dégagée, la voiture dynamométrique est attelée. Pousser une machine à vapeur au-delà de 200 km/h, c'est risquer de la casser." }
+[event.trigger]
+era  = "apogee"
+owns = ["mallard"]
+
+  [[event.choice]]
+  label   = { fr = "Tenter le record" }
+  outcome = { fr = "126 mph, soit 202,6 km/h : jamais une locomotive à vapeur n'ira plus vite. La Mallard rentre au dépôt avec une tête de bielle surchauffée, mais ta compagnie fait la une dans le monde entier." }
+  effects = [{ kind = "money", value = 4000000.0 }, { kind = "satisfaction", value = 0.12 }, { kind = "track_condition", value = -0.15 }]
+
+  [[event.choice]]
+  label   = { fr = "S'en tenir aux essais de freinage" }
+  outcome = { fr = "Les essais se déroulent sans incident. Les données de freinage serviront à tes ingénieurs." }
+  effects = [{ kind = "grant_research", target = "electropneumatic_brake" }]
+
+[[event]]
+id    = "landes_record"
+year  = 1955
+title = { fr = "331 km/h dans les Landes" }
+text  = { fr = "Mars 1955. Sur la longue ligne droite des Landes, tes ingénieurs veulent savoir jusqu'où le rail peut aller. La locomotive est préparée, la tension de la caténaire relevée. Personne ne sait comment la voie supportera une machine de cent tonnes lancée à plus de 300 km/h." }
+[event.trigger]
+era  = "modern"
+owns = ["cc_7107", "bb_9004"]
+
+  [[event.choice]]
+  label   = { fr = "Lancer la marche à très grande vitesse" }
+  outcome = { fr = "331 km/h : record du monde. Derrière la machine, la voie est tordue sur des centaines de mètres et le pantographe a fondu. La preuve est faite que la grande vitesse est possible, et qu'elle exigera des voies conçues pour elle." }
+  effects = [{ kind = "money", value = 20000000.0 }, { kind = "satisfaction", value = 0.10 }, { kind = "track_condition", value = -0.45 }]
+
+  [[event.choice]]
+  label   = { fr = "Se limiter à 240 km/h" }
+  outcome = { fr = "L'essai est un succès technique sans éclat. La voie n'a pas souffert." }
+  effects = [{ kind = "money", value = 3000000.0 }]
+
+[[event]]
+id    = "shinkansen_opening"
+year  = 1964
+title = { fr = "Inauguration d'une ligne nouvelle" }
+text  = { fr = "1er octobre 1964. Ta première rame à grande vitesse est prête, quelques jours avant que le monde entier ne regarde vers les Jeux olympiques. Les essais ont été courts ; certains ingénieurs voudraient encore quelques semaines." }
+[event.trigger]
+era  = "high_speed"
+owns = ["shinkansen_0"]
+
+  [[event.choice]]
+  label   = { fr = "Ouvrir à temps pour les Jeux" }
+  outcome = { fr = "Les rames filent à 210 km/h, à l'heure à la seconde près, devant les caméras du monde entier. Le train redevient moderne." }
+  effects = [{ kind = "satisfaction", value = 0.15 }, { kind = "money", value = 150000000.0 }]
+
+  [[event.choice]]
+  label   = { fr = "Prolonger les essais" }
+  outcome = { fr = "Les Jeux se passent sans toi, mais les essais affinent la signalisation de la ligne." }
+  effects = [{ kind = "grant_research", target = "etcs" }]
+
+[[event]]
+id    = "tgv_launch"
+year  = 1981
+title = { fr = "Paris-Lyon en deux heures quarante" }
+text  = { fr = "Septembre 1981. Ta rame articulée entre en service. Faut-il en faire un train de prestige à supplément, ou un train pour tout le monde, au prix du train classique ?" }
+[event.trigger]
+era  = "high_speed"
+owns = ["tgv_sud_est"]
+
+  [[event.choice]]
+  label   = { fr = "La grande vitesse au prix du train ordinaire" }
+  outcome = { fr = "Les rames sont pleines dès les premières semaines : l'avion perd ses passagers sur la ligne." }
+  effects = [{ kind = "satisfaction", class = "commuter", value = 0.20 }, { kind = "satisfaction", class = "business", value = 0.15 }, { kind = "satisfaction", class = "tourist", value = 0.15 }]
+
+  [[event.choice]]
+  label   = { fr = "Un train de prestige, avec supplément" }
+  outcome = { fr = "La clientèle d'affaires paie sans discuter. Les autres regardent passer le train orange." }
+  effects = [{ kind = "money", value = 200000000.0 }, { kind = "satisfaction", class = "commuter", value = -0.10 }]
+
+[[event]]
+id    = "v150_record"
+year  = 2007
+title = { fr = "Opération V150" }
+text  = { fr = "3 avril 2007. La rame d'essai est prête : 19,6 MW, des roues agrandies, une caténaire survoltée. Objectif : 150 mètres par seconde. Les essais en direct coûtent cher, et la voie comme la caténaire en sortiront éprouvées." }
+[event.trigger]
+era  = "high_speed"
+owns = ["v150"]
+
+  [[event.choice]]
+  label   = { fr = "Tenter le record en direct" }
+  outcome = { fr = "574,8 km/h, record du monde sur rails. Tes rames se vendront dans le monde entier." }
+  effects = [{ kind = "money", value = 800000000.0 }, { kind = "satisfaction", value = 0.10 }, { kind = "track_condition", value = -0.35 }]
+
+  [[event.choice]]
+  label   = { fr = "Garder la rame pour des essais discrets" }
+  outcome = { fr = "Pas de record, mais des mois de mesures à très grande vitesse." }
+  effects = [{ kind = "grant_research", target = "slab_track" }]

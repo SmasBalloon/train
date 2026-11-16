@@ -7,12 +7,45 @@ start_locomotive      = "locomotion_1"
 start_line            = "stockton_darlington"
 
 fare_per_km           = 0.10    # £ par voyageur et par km
-demand_per_1000_per_h = 8.0     # voyageurs par heure pour 1000 habitants
+demand_per_1000_per_h = 8.0     # voyageurs par heure pour 1000 habitants (villes moyennes d'une ligne)
+demand_ref_km         = 19.0    # longueur de ligne pour laquelle la demande vaut cette base
+demand_distance_exp   = 1.0     # la demande d'une ligne décroît en (référence / longueur)^exposant
+build_cost_per_km     = 50.0    # construction d'une ligne, par km (première époque, relief neutre)
 station_waiting_cap   = 150.0   # voyageurs max en attente dans une gare
 
-boarding_per_min      = 4.0     # voyageurs embarqués par minute de jeu
-min_dwell_min         = 5.0     # arrêt minimal avant un départ automatique
-max_wait_min          = 30.0    # départ automatique même si le train n'est pas plein
+boarding_per_min      = 4.0     # voyageurs embarqués par minute de jeu, au minimum
+boarding_full_min     = 10.0    # un train de grande capacité se remplit en ce temps
+resale_ratio          = 0.5     # part du prix d'achat récupérée en revendant une machine
+days_per_year         = 2.0     # jours de jeu pour une année du calendrier affiché
+
+# Circulation
+base_line_speed_kmh   = 80.0    # vitesse autorisée sur une voie sans amélioration
+base_signal_speed_kmh = 50.0    # vitesse autorisée sans aucune signalisation
+accel_k               = 0.03    # accélération (m/s²) par kW et par tonne
+accel_max             = 1.0     # plafond d'adhérence, en m/s²
+base_decel            = 0.12    # freinage sans aucune recherche, en m/s²
+decel_max             = 1.2
+unit_weight_t         = 0.15    # masse ajoutée au train par place offerte
+fuel_emergency_mult   = 1.6     # surcoût d'un achat d'urgence quand le stock est vide
+
+# Horaires, prix et satisfaction
+default_dwell_min     = 20.0    # arrêt prévu en gare avant le départ suivant
+dwell_min_min         = 5.0     # bornes du réglage d'horaire
+dwell_max_min         = 120.0
+delay_tolerance_min   = 45.0    # retard au-delà duquel la ponctualité tombe à zéro
+fare_level_min        = 0.5     # bornes du réglage de prix (1.0 = tarif normal)
+fare_level_max        = 2.0
+base_comfort          = 0.3     # confort sans aucune recherche (0 à 1)
+satisfaction_inertia  = 200.0   # voyageurs transportés pour faire bouger nettement l'opinion
+
+# Prestige : points gagnés en nationalisant la compagnie
+prestige_min_era      = "steam" # époque à atteindre pour pouvoir nationaliser
+prestige_base         = 100000.0  # recettes cumulées à partir desquelles les points comptent
+prestige_per_decade   = 10.0    # points par facteur dix de recettes au-delà de cette base
+
+# Gains hors ligne
+offline_max_h         = 8.0     # heures réelles d'absence prises en compte au maximum
+offline_efficiency    = 0.5     # part du temps d'absence réellement simulée
 
 wear_per_train_km     = 0.00015 # perte d'état de la voie par train-km
 wear_slow_threshold   = 0.7     # en dessous, les trains ralentissent

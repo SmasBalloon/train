@@ -6,6 +6,8 @@ use ratatui::symbols::border;
 pub struct Glyphs {
     pub ascii: bool,
     pub station: char,
+    /// Gare pas encore desservie.
+    pub station_idle: char,
     /// Tête de train selon le cap, par huitième de tour depuis l'est (sens horaire à l'écran).
     pub heads: [char; 8],
     pub wagon: char,
@@ -38,6 +40,7 @@ impl Glyphs {
             Glyphs {
                 ascii,
                 station: 'O',
+                station_idle: 'o',
                 heads: ['>', '\\', 'v', '/', '<', '\\', '^', '/'],
                 wagon: '#',
                 smoke: ['.', 'o', 'O'],
@@ -55,6 +58,7 @@ impl Glyphs {
             Glyphs {
                 ascii,
                 station: '◉',
+                station_idle: '○',
                 heads: ['▶', '◢', '▼', '◣', '◀', '◤', '▲', '◥'],
                 wagon: '■',
                 smoke: ['·', '∘', '○'],
@@ -96,7 +100,13 @@ mod tests {
     fn ascii_set_is_pure_ascii() {
         let g = Glyphs::new(true);
         let mut all: String = g.heads.iter().chain(&g.smoke).collect();
-        all.extend([g.station, g.wagon, g.gauge_full, g.gauge_empty]);
+        all.extend([
+            g.station,
+            g.station_idle,
+            g.wagon,
+            g.gauge_full,
+            g.gauge_empty,
+        ]);
         for s in [g.sep, g.arrow, g.cursor, g.check, g.bullet, g.dash] {
             all.push_str(s);
         }

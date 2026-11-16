@@ -1,0 +1,60 @@
+# Bonus permanents, achetés avec les points de prestige obtenus en
+# nationalisant la compagnie. Ils survivent à chaque nouvelle partie.
+#
+# kind :
+#   income_mult         recettes : + value par niveau (0.10 = +10 %)
+#   research_speed      vitesse de recherche : + value par niveau
+#   build_cost_mult     coût des lignes et améliorations : × (1 - value) par niveau
+#   offline_efficiency  efficacité hors ligne : + value par niveau
+#   start_money         argent de départ : + value par niveau
+# Le prix d'un niveau est `cost` × `cost_growth`^(niveaux déjà acquis).
+
+[[bonus]]
+id          = "reputation"
+kind        = "income_mult"
+value       = 0.10
+cost        = 2
+cost_growth = 1.5
+max_level   = 20
+name        = { fr = "Réputation de la compagnie", en = "Company reputation" }
+description = { fr = "Le nom de la maison rassure : chaque billet se vend un peu plus cher." }
+
+[[bonus]]
+id          = "engineering_school"
+kind        = "research_speed"
+value       = 0.20
+cost        = 2
+cost_growth = 1.6
+max_level   = 10
+name        = { fr = "École d'ingénieurs", en = "Engineering school" }
+description = { fr = "Tes anciens ingénieurs forment les nouveaux : les recherches aboutissent plus vite." }
+
+[[bonus]]
+id          = "works_department"
+kind        = "build_cost_mult"
+value       = 0.08
+cost        = 3
+cost_growth = 1.6
+max_level   = 8
+name        = { fr = "Service des travaux", en = "Works department" }
+description = { fr = "Des entrepreneurs fidèles et des plans déjà dessinés : lignes et améliorations coûtent moins cher." }
+
+[[bonus]]
+id          = "night_shift"
+kind        = "offline_efficiency"
+value       = 0.10
+cost        = 3
+cost_growth = 1.8
+max_level   = 5
+name        = { fr = "Équipes de nuit", en = "Night shift" }
+description = { fr = "Le réseau tourne mieux en ton absence." }
+
+[[bonus]]
+id          = "shareholders"
+kind        = "start_money"
+value       = 2000.0
+cost        = 1
+cost_growth = 1.4
+max_level   = 15
+name        = { fr = "Actionnaires fidèles", en = "Loyal shareholders" }
+description = { fr = "La nouvelle compagnie démarre avec un capital plus confortable." }

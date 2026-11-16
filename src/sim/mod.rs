@@ -1,13 +1,21 @@
 //! Simulation pure : aucun accès au terminal, au disque ou à l'horloge.
 
 mod actions;
+mod kinematics;
 mod modifiers;
+mod offline;
 mod tick;
 mod world;
 
-pub use actions::ActionError;
-pub use modifiers::Modifiers;
-pub use tick::{MAX_STEP, SimEvent, advance, condition_factor};
+pub use actions::{ActionError, UnlockStatus};
+pub use kinematics::Profile;
+pub use modifiers::{LineProps, Modifiers};
+pub use offline::{OFFLINE_STEP, OfflineReport, catch_up};
+pub use tick::{
+    MAX_STEP, SimEvent, advance, advance_with_step, allowed_speed, condition_factor,
+    demand_per_hour, station_capacity, trip_score, water_wait_s,
+};
 pub use world::{
-    ActiveResearch, Dir, LineState, SAVE_VERSION, StationState, Train, TrainState, World,
+    ActiveResearch, Dir, LineState, Prestige, SAVE_VERSION, StationState, Train, TrainState, Trip,
+    World, hour_minute,
 };

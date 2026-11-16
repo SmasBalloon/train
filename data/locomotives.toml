@@ -1,4 +1,17 @@
-# Locomotives. `requires` liste les recherches nécessaires pour l'achat.
+# Locomotives et rames.
+#
+# era              époque à partir de laquelle la machine est disponible
+# requires         recherches nécessaires à l'achat
+# requires_upgrade amélioration de ligne indispensable (caténaire, voie maglev…)
+# traction         steam | diesel | electric | maglev | vactrain
+# top_speed_kmh    vitesse maximale en service
+# record_kmh       record de vitesse, pour la fiche (facultatif)
+# power_kw         puissance : avec la masse, elle fixe l'accélération
+# weight_t         masse à vide ; chaque place occupée ajoute du poids
+# fuel, fuel_per_km  énergie consommée, dans l'unité de fuels.toml
+# upkeep_per_h     entretien par heure de marche (prix de la première époque)
+# track_wear       agressivité pour la voie
+# speculative      vrai pour un concept qui n'a jamais existé
 
 [[locomotive]]
 id            = "locomotion_1"
@@ -9,14 +22,17 @@ era           = "pioneers"
 traction      = "steam"
 wheels        = "0-4-0"
 top_speed_kmh = 24.0
+power_kw      = 12.0
 weight_t      = 6.6
 capacity      = 40
 cost          = 400.0
-upkeep_per_h  = 6.0
+upkeep_per_h  = 2.0
+fuel          = "coal"
+fuel_per_km   = 0.012
 track_wear    = 1.0
 [locomotive.history]
 fr = "Construite à Newcastle par George et Robert Stephenson, elle tracte le 27 septembre 1825 le train inaugural du Stockton & Darlington Railway, première ligne publique à utiliser la traction à vapeur. Lente mais robuste, elle tire ce jour-là des wagons de charbon et plusieurs centaines de passagers."
-en = "Built in Newcastle by George and Robert Stephenson, it hauled the inaugural train of the Stockton & Darlington Railway on 27 September 1825, the first public railway to use steam traction."
+en = "Built in Newcastle by George and Robert Stephenson, it hauled the inaugural train of the Stockton & Darlington Railway on 27 September 1825."
 
 [[locomotive]]
 id            = "rocket"
@@ -27,12 +43,272 @@ era           = "pioneers"
 traction      = "steam"
 wheels        = "0-2-2"
 top_speed_kmh = 48.0
+power_kw      = 15.0
 weight_t      = 4.3
 capacity      = 30
 cost          = 1500.0
-upkeep_per_h  = 9.0
+upkeep_per_h  = 3.0
+fuel          = "coal"
+fuel_per_km   = 0.010
 track_wear    = 1.3
 requires      = ["multitubular_boiler"]
 [locomotive.history]
 fr = "Vainqueur du concours de Rainhill en octobre 1829, la Rocket atteint environ 48 km/h. Sa chaudière multitubulaire et son échappement dans la cheminée fixent l'architecture de presque toutes les locomotives à vapeur qui suivront. Légère et rapide, elle emporte moins qu'une machine lourde."
 en = "Winner of the Rainhill Trials in October 1829, Rocket reached about 30 mph. Its multitubular boiler and blastpipe set the template for nearly every steam locomotive that followed."
+
+[[locomotive]]
+id            = "crampton"
+name          = "Crampton"
+builder       = "Cail, d'après Thomas Crampton"
+year          = 1849
+era           = "steam"
+traction      = "steam"
+wheels        = "4-2-0"
+top_speed_kmh = 120.0
+record_kmh    = 144.0
+power_kw      = 300.0
+weight_t      = 29.0
+capacity      = 110
+cost          = 14000.0
+upkeep_per_h  = 12.0
+fuel          = "coal"
+fuel_per_km   = 0.011
+track_wear    = 1.6
+[locomotive.history]
+fr = "Brevetée en 1843 par l'ingénieur anglais Thomas Russell Crampton, cette machine place son unique essieu moteur, aux roues de plus de deux mètres, derrière le foyer : le centre de gravité est bas et la tenue de voie excellente. Boudée en Angleterre, elle fait la gloire des express français du Nord et de l'Est, à 120 km/h, au point que « prendre le Crampton » voulait dire prendre le rapide. Une Crampton modifiée atteint 144 km/h aux essais en 1890. Un seul essieu moteur : elle est rapide, mais ne tire que des trains légers."
+en = "Patented in 1843 by Thomas Russell Crampton, with a single huge driving axle behind the firebox. A star of French expresses at 120 km/h, but only with light trains."
+
+[[locomotive]]
+id            = "pacific_po_4500"
+name          = "Pacific 4500 du Paris-Orléans"
+builder       = "SACM, Belfort"
+year          = 1907
+era           = "steam"
+traction      = "steam"
+wheels        = "4-6-2"
+top_speed_kmh = 120.0
+power_kw      = 1300.0
+weight_t      = 91.0
+capacity      = 340
+cost          = 48000.0
+upkeep_per_h  = 30.0
+fuel          = "coal"
+fuel_per_km   = 0.020
+track_wear    = 2.4
+requires      = ["compound_engine"]
+[locomotive.history]
+fr = "Livrées à partir de 1907 à la Compagnie du Paris-Orléans, les 4500 sont les premières Pacific d'Europe : un bogie avant, trois essieux moteurs et un essieu porteur sous un grand foyer. Machines compound à quatre cylindres, elles emmènent des trains lourds à 120 km/h. Reconstruites par André Chapelon à partir de 1929, elles doubleront presque leur puissance. Lourde, elle emporte beaucoup mais accélère lentement et fatigue la voie."
+en = "Delivered from 1907 to the Paris-Orléans company, the first Pacifics in Europe: four-cylinder compounds hauling heavy trains at 120 km/h."
+
+[[locomotive]]
+id            = "mallard"
+name          = "A4 Mallard"
+builder       = "LNER, Doncaster"
+year          = 1938
+era           = "apogee"
+traction      = "steam"
+wheels        = "4-6-2"
+top_speed_kmh = 145.0
+record_kmh    = 202.6
+power_kw      = 1900.0
+weight_t      = 104.6
+capacity      = 420
+cost          = 150000.0
+upkeep_per_h  = 60.0
+fuel          = "coal"
+fuel_per_km   = 0.019
+track_wear    = 2.2
+requires      = ["kylchap_exhaust", "streamlining"]
+[locomotive.history]
+fr = "Dessinée par Sir Nigel Gresley pour le London & North Eastern Railway, la n° 4468 Mallard sort des ateliers de Doncaster en mars 1938. Carénage en coin étudié en soufflerie, trois cylindres, double échappement Kylchap. Le 3 juillet 1938, en descendant Stoke Bank avec sept voitures, elle atteint 126 mph, soit 202,6 km/h : le record du monde de vitesse d'une locomotive à vapeur, qui tient toujours. Elle en revient avec une tête de bielle surchauffée."
+en = "Designed by Sir Nigel Gresley for the LNER. On 3 July 1938 on Stoke Bank she reached 126 mph, the still-standing world speed record for steam."
+
+[[locomotive]]
+id            = "deltic"
+name          = "Deltic (Class 55)"
+builder       = "English Electric"
+year          = 1961
+era           = "modern"
+traction      = "diesel"
+wheels        = "Co-Co"
+top_speed_kmh = 161.0
+power_kw      = 2460.0
+weight_t      = 99.0
+capacity      = 480
+cost          = 400000.0
+upkeep_per_h  = 110.0
+fuel          = "diesel"
+fuel_per_km   = 0.004
+track_wear    = 1.8
+requires      = ["diesel_electric"]
+[locomotive.history]
+fr = "Vingt-deux machines construites en 1961 et 1962 pour la ligne de la côte est britannique, entre Londres et Édimbourg. Deux moteurs Napier Deltic à pistons opposés, conçus pour des vedettes rapides, leur donnent 3 300 chevaux : c'étaient alors les diesels de ligne les plus puissants du monde, capables de tenir 100 mph (161 km/h) en service. Pas d'eau à prendre, pas de caténaire : il lui suffit de gazole."
+en = "Twenty-two locomotives built in 1961–62 for the East Coast Main Line, with two Napier Deltic engines giving 3,300 hp and 100 mph in service."
+
+[[locomotive]]
+id               = "bb_9004"
+name             = "BB 9004"
+builder          = "Schneider-Jeumont (MTE)"
+year             = 1954
+era              = "modern"
+traction         = "electric"
+wheels           = "Bo'Bo'"
+top_speed_kmh    = 140.0
+record_kmh       = 331.0
+power_kw         = 2980.0
+weight_t         = 83.0
+capacity         = 440
+cost             = 500000.0
+upkeep_per_h     = 80.0
+fuel             = "electricity"
+fuel_per_km      = 0.014
+track_wear       = 1.5
+requires         = ["electric_traction"]
+requires_upgrade = "catenary"
+[locomotive.history]
+fr = "Prototype de locomotive électrique légère à deux bogies moteurs, sous 1 500 volts continu. Le 29 mars 1955, sur la ligne des Landes entre Facture et Morcenx, elle atteint 331 km/h, au lendemain de la CC 7107 : un record du monde partagé qui tiendra jusqu'en 2006 pour une locomotive. Elle en revient pantographe fondu, et la voie déformée par son passage. Légère, elle accélère vite mais tracte moins que sa grande sœur."
+en = "A light Bo'Bo' prototype for 1,500 V DC. On 29 March 1955 on the Landes line she reached 331 km/h, the day after CC 7107."
+
+[[locomotive]]
+id               = "cc_7107"
+name             = "CC 7107"
+builder          = "Alsthom"
+year             = 1953
+era              = "modern"
+traction         = "electric"
+wheels           = "Co'Co'"
+top_speed_kmh    = 150.0
+record_kmh       = 331.0
+power_kw         = 3490.0
+weight_t         = 107.0
+capacity         = 620
+cost             = 700000.0
+upkeep_per_h     = 100.0
+fuel             = "electricity"
+fuel_per_km      = 0.019
+track_wear       = 2.0
+requires         = ["electric_traction"]
+requires_upgrade = "catenary"
+[locomotive.history]
+fr = "Les CC 7100 d'Alsthom, à six essieux moteurs, sont les grandes machines de vitesse de la SNCF des années 1950, en tête du Mistral entre Paris et Lyon. Le 28 mars 1955, la CC 7107, à peine modifiée, atteint 331 km/h dans les Landes avec trois voitures. L'essai prouve qu'on peut rouler très vite sur rails, et montre ce qu'il en coûte : la voie est tordue sur des centaines de mètres. Lourde et puissante, elle emmène de longs trains."
+en = "Alsthom's six-axle CC 7100s were SNCF's fast express locomotives of the 1950s. On 28 March 1955, CC 7107 reached 331 km/h in the Landes."
+
+[[locomotive]]
+id               = "shinkansen_0"
+name             = "Shinkansen série 0"
+builder          = "Nippon Sharyo, Kawasaki, Hitachi et autres"
+year             = 1964
+era              = "high_speed"
+traction         = "electric"
+wheels           = "rame automotrice de 12 voitures"
+top_speed_kmh    = 210.0
+record_kmh       = 256.0
+power_kw         = 8880.0
+weight_t         = 720.0
+capacity         = 987
+cost             = 5000000.0
+upkeep_per_h     = 400.0
+fuel             = "electricity"
+fuel_per_km      = 0.035
+track_wear       = 1.4
+requires         = ["distributed_traction", "cab_signalling"]
+requires_upgrade = "catenary"
+[locomotive.history]
+fr = "Le 1er octobre 1964, neuf jours avant les Jeux olympiques de Tokyo, le Tōkaidō Shinkansen relie Tokyo à Osaka à 210 km/h sur une ligne neuve à voie normale, sans passage à niveau. La série 0 n'a pas de locomotive : tous les essieux sont moteurs, ce qui répartit le poids et l'adhérence. La signalisation est entièrement en cabine. Près de mille places par rame : c'est un train de masse, peu agressif pour la voie."
+en = "On 1 October 1964 the Tōkaidō Shinkansen linked Tokyo and Osaka at 210 km/h on a dedicated line, with every axle powered and signalling entirely in the cab."
+
+[[locomotive]]
+id               = "tgv_sud_est"
+name             = "TGV Sud-Est"
+builder          = "Alsthom et Francorail-MTE"
+year             = 1981
+era              = "high_speed"
+traction         = "electric"
+wheels           = "rame articulée, 2 motrices et 8 remorques"
+top_speed_kmh    = 270.0
+record_kmh       = 380.0
+power_kw         = 6450.0
+weight_t         = 385.0
+capacity         = 386
+cost             = 7000000.0
+upkeep_per_h     = 350.0
+fuel             = "electricity"
+fuel_per_km      = 0.018
+track_wear       = 1.1
+requires         = ["articulated_trainset", "cab_signalling"]
+requires_upgrade = "catenary"
+[locomotive.history]
+fr = "Mis en service le 27 septembre 1981 entre Paris et Lyon. Les remorques sont articulées : deux caisses voisines reposent sur un même bogie, ce qui allège la rame et la rend plus stable. Le 26 février 1981, la rame n° 16 atteint 380 km/h. À 260 puis 270 km/h en service, le conducteur ne peut plus lire les signaux au bord de la voie : la vitesse autorisée s'affiche en cabine. Moins de places qu'un Shinkansen, mais plus rapide et plus léger."
+en = "In service from 27 September 1981 between Paris and Lyon, with articulated trailers and in-cab signalling. Set 16 reached 380 km/h on 26 February 1981."
+
+[[locomotive]]
+id               = "v150"
+name             = "Rame V150"
+builder          = "Alstom"
+year             = 2007
+era              = "high_speed"
+traction         = "electric"
+wheels           = "2 motrices et 3 remorques à deux niveaux"
+top_speed_kmh    = 574.8
+record_kmh       = 574.8
+power_kw         = 19600.0
+weight_t         = 268.0
+capacity         = 105
+cost             = 20000000.0
+upkeep_per_h     = 1500.0
+fuel             = "electricity"
+fuel_per_km      = 0.060
+track_wear       = 3.5
+requires         = ["v150_program"]
+requires_upgrade = "catenary"
+[locomotive.history]
+fr = "Une rame d'essai, pas un train commercial : deux motrices de TGV et trois remorques à deux niveaux, des roues agrandies, 19,6 MW de puissance et une caténaire survoltée à 31 000 volts. Le 3 avril 2007, sur la LGV Est européenne, elle atteint 574,8 km/h, record du monde sur rails. V150 pour 150 mètres par seconde. Elle n'emporte presque personne, coûte une fortune et use la voie comme aucune autre : c'est une vitrine."
+en = "A test train, not a commercial one. On 3 April 2007 on the LGV Est it reached 574.8 km/h, the world record on rails."
+
+[[locomotive]]
+id               = "l0_maglev"
+name             = "Maglev série L0"
+builder          = "Mitsubishi Heavy Industries et Nippon Sharyo"
+year             = 2015
+era              = "future"
+traction         = "maglev"
+wheels           = "sustentation magnétique supraconductrice"
+top_speed_kmh    = 500.0
+record_kmh       = 603.0
+power_kw         = 60000.0
+weight_t         = 180.0
+capacity         = 440
+cost             = 40000000.0
+upkeep_per_h     = 3000.0
+fuel             = "electricity"
+fuel_per_km      = 0.045
+track_wear       = 0.2
+requires         = ["superconducting_maglev"]
+requires_upgrade = "maglev_guideway"
+[locomotive.history]
+fr = "Rame japonaise à sustentation électrodynamique : des aimants supraconducteurs embarqués la soulèvent d'une dizaine de centimètres au-dessus de la voie de guidage au-delà de 150 km/h environ. Le 21 avril 2015, sur la ligne d'essai de Yamanashi, une rame de sept voitures atteint 603 km/h, record du monde pour un véhicule ferroviaire. Elle est conçue pour 500 km/h en service. Sans contact, elle n'use presque pas la voie, mais il lui faut une infrastructure entièrement neuve."
+en = "Japanese superconducting maglev. On 21 April 2015 on the Yamanashi test line a seven-car set reached 603 km/h."
+
+[[locomotive]]
+id               = "vactrain_concept"
+name             = "Capsule en tube (concept)"
+builder          = "aucun : concept spéculatif"
+year             = 2050
+era              = "future"
+traction         = "vactrain"
+wheels           = "sustentation magnétique en tube à basse pression"
+top_speed_kmh    = 1000.0
+power_kw         = 40000.0
+weight_t         = 60.0
+capacity         = 80
+cost             = 300000000.0
+upkeep_per_h     = 6000.0
+fuel             = "electricity"
+fuel_per_km      = 0.015
+track_wear       = 0.1
+requires         = ["vacuum_tube"]
+requires_upgrade = "vacuum_tube"
+speculative      = true
+[locomotive.history]
+fr = "Ce train n'existe pas. L'idée, elle, est ancienne : faire circuler des capsules dans un tube dont on a retiré presque tout l'air, pour supprimer la résistance aérodynamique. Robert Goddard en esquisse le principe dès les années 1900 ; des projets en reprennent l'idée au XXIe siècle sans qu'aucune ligne commerciale n'ait vu le jour. Les chiffres donnés ici sont des ordres de grandeur de projets, pas des mesures."
+en = "This train does not exist. The idea of capsules in a near-vacuum tube dates back to the 1900s; no commercial line has ever been built. Figures are project estimates."

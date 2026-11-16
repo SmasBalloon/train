@@ -9,7 +9,8 @@ use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::sim::{SAVE_VERSION, World};
+use crate::data::GameData;
+use crate::sim::{OfflineReport, SAVE_VERSION, World, catch_up};
 
 const SAVE_FILE: &str = "save.json";
 const LOCK_FILE: &str = "rainhill.lock";
@@ -41,9 +42,7 @@ pub fn save(dir: &Path, world: &World) -> Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("création de {} impossible", dir.display()))?;
     let file = SaveFile {
         version: SAVE_VERSION,
-        saved_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs()),
+        saved_at: unix_now(),
         world: world.clone(),
     };
     let json = serde_json::to_string_pretty(&file).context("sérialisation de la sauvegarde")?;
@@ -55,8 +54,37 @@ pub fn save(dir: &Path, world: &World) -> Result<()> {
     Ok(())
 }
 
-/// Charge la sauvegarde. `Ok(None)` s'il n'y en a pas encore.
-pub fn load(dir: &Path) -> Result<Option<World>> {
+/// Partie relue sur le disque, avec l'heure de son écriture (secondes Unix).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Loaded {
+    pub world: World,
+    pub saved_at: u64,
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Charge la sauvegarde et la remet à l'heure : conversion de format, puis
+/// rattrapage du temps écoulé depuis son écriture. `Ok(None)` s'il n'y en a pas.
+pub fn load_current(dir: &Path, data: &GameData) -> Result<Option<(World, OfflineReport)>> {
+    let Some(Loaded {
+        mut world,
+        saved_at,
+    }) = load(dir)?
+    else {
+        return Ok(None);
+    };
+    world.reconcile(data);
+    let away = unix_now().saturating_sub(saved_at) as f64;
+    let report = catch_up(&mut world, data, away);
+    Ok(Some((world, report)))
+}
+
+/// Charge la sauvegarde telle quelle. `Ok(None)` s'il n'y en a pas encore.
+pub fn load(dir: &Path) -> Result<Option<Loaded>> {
     let path = save_path(dir);
     if !path.exists() {
         return Ok(None);
@@ -77,7 +105,10 @@ pub fn load(dir: &Path) -> Result<Option<World>> {
             SAVE_VERSION
         );
     }
-    Ok(Some(file.world))
+    Ok(Some(Loaded {
+        world: file.world,
+        saved_at: file.saved_at,
+    }))
 }
 
 /// Met de côté la sauvegarde existante (`save.json.bak`) avant une nouvelle partie.
@@ -138,7 +169,14 @@ mod tests {
 
         assert!(load(&dir).unwrap().is_none());
         save(&dir, &world).unwrap();
-        assert_eq!(load(&dir).unwrap(), Some(world));
+        let loaded = load(&dir).unwrap().unwrap();
+        assert_eq!(loaded.world, world);
+        assert!(unix_now() - loaded.saved_at < 5);
+
+        // Rechargée aussitôt, la partie n'a presque pas bougé.
+        let (current, report) = load_current(&dir, &data).unwrap().unwrap();
+        assert!(report.away_s < 5.0);
+        assert!(current.clock - world.clock <= 5.0 * data.balance.time_scale);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -151,6 +189,26 @@ mod tests {
         backup(&dir).unwrap();
         assert!(load(&dir).unwrap().is_none());
         assert!(dir.join("save.json.bak").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn time_away_is_caught_up_on_load() {
+        let dir = temp_dir("offline");
+        let data = GameData::embedded().unwrap();
+        let mut world = World::new(&data);
+        world.research_done.insert("hand_signals".into());
+        save(&dir, &world).unwrap();
+
+        // On antidate la sauvegarde d'une heure.
+        let path = save_path(&dir);
+        let mut file: SaveFile = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        file.saved_at -= 3600;
+        fs::write(&path, serde_json::to_string(&file).unwrap()).unwrap();
+
+        let (current, report) = load_current(&dir, &data).unwrap().unwrap();
+        assert!((3600.0..3605.0).contains(&report.away_s));
+        assert!(report.trips > 20 && current.money > world.money);
         fs::remove_dir_all(&dir).unwrap();
     }
 

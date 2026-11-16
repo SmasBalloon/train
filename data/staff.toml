@@ -1,0 +1,42 @@
+# Personnel : chaque service automatise une tâche, contre un prix d'engagement
+# et un salaire par heure de jeu (multiplié par le niveau des coûts de l'époque).
+#
+# role :
+#   { kind = "auto_repair", threshold = 0.8 }
+#       remet la voie à neuf dès que son état passe sous le seuil
+#   { kind = "auto_fuel", reserve_h = 12.0, max_price_ratio = 1.05 }
+#       reconstitue `reserve_h` heures de combustible quand le cours ne dépasse pas
+#       le prix de base × max_price_ratio (ou à tout prix si le stock est presque vide)
+#   { kind = "auto_timetable", crowd_factor = 0.6 }
+#       raccourcit l'arrêt en gare quand les quais sont pleins
+#
+# Les départs automatiques, eux, viennent de la recherche « Signaleurs de voie ».
+
+[[staff]]
+id           = "track_gangs"
+era          = "pioneers"
+requires     = ["wrought_iron_rails"]
+cost         = 4000.0
+salary_per_h = 15.0
+role         = { kind = "auto_repair", threshold = 0.8 }
+name         = { fr = "Brigades de la voie", en = "Track gangs" }
+description  = { fr = "Des cantonniers parcourent chaque ligne et la remettent en état avant que les trains ne doivent ralentir. La réparation est payée au prix habituel, mais plus besoin d'y penser." }
+
+[[staff]]
+id           = "supply_office"
+era          = "steam"
+cost         = 80000.0
+salary_per_h = 120.0
+role         = { kind = "auto_fuel", reserve_h = 12.0, max_price_ratio = 1.05 }
+name         = { fr = "Service des approvisionnements", en = "Supply office" }
+description  = { fr = "Des acheteurs suivent les cours et reconstituent douze heures de réserve quand le prix est raisonnable. Si le stock est presque vide, ils achètent quand même, pour éviter les livraisons d'urgence." }
+
+[[staff]]
+id           = "timetable_office"
+era          = "steam"
+requires     = ["semaphore_block"]
+cost         = 300000.0
+salary_per_h = 300.0
+role         = { kind = "auto_timetable", crowd_factor = 0.6 }
+name         = { fr = "Bureau des horaires", en = "Timetable office" }
+description  = { fr = "Les régulateurs adaptent la grille à l'affluence : quand les quais sont pleins, les trains repartent plus vite ; aux heures creuses, ils attendent comme prévu." }

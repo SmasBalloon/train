@@ -7,18 +7,36 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Widget};
 
 use crate::data::DecorKind;
-use crate::sim::{Modifiers, TrainState, condition_factor};
+use crate::sim::TrainState;
 
 use super::app::{App, LOG_TTL, LogKind};
 use super::canvas::{MapCanvas, Stroke};
 use super::format;
 
 const PRIO_GRID: u8 = 1;
-const PRIO_DECOR: u8 = 2;
-const PRIO_TRACK: u8 = 3;
+const PRIO_BORDER: u8 = 2;
+const PRIO_DECOR: u8 = 3;
+const PRIO_PROJECT: u8 = 4;
+const PRIO_TRACK: u8 = 5;
 
-/// Échelle (sous-pixels par unité) à partir de laquelle on dessine rails et traverses.
-const DETAIL_SCALE: f64 = 10.0;
+// Niveaux de détail, selon l'échelle (sous-pixels par unité de carte). Le seuil
+// entre la vue continent et la vue pays dépend de la taille du terminal : voir
+// `App::country_scale`.
+/// Vue gare au-dessus : files d'attente par clientèle, trains à quai, convois.
+pub const SCALE_STATION: f64 = 12.0;
+/// Rails et traverses dessinés un par un.
+const SCALE_RAILS: f64 = 100.0;
+
+/// Nom du niveau de zoom : `country` est l'échelle où commence la vue pays.
+pub fn view_name(scale: f64, country: f64) -> &'static str {
+    if scale >= SCALE_STATION {
+        "gare"
+    } else if scale >= country {
+        "pays"
+    } else {
+        "continent"
+    }
+}
 
 /// Remplace un caractère non ASCII par son équivalent le plus proche.
 pub fn ascii_fold(ch: char) -> char {
@@ -114,10 +132,10 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
 fn draw_grid(app: &App, canvas: &mut MapCanvas) {
     let cam = &app.camera;
     let size = canvas.px_size();
-    let spacing = [0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0]
+    let spacing = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
         .into_iter()
         .find(|s| s * cam.scale >= 24.0)
-        .unwrap_or(500.0);
+        .unwrap_or(200.0);
     let top_left = cam.to_world((0.0, 0.0), size);
     let bottom_right = cam.to_world(size, size);
     let mut gy = (top_left[1] / spacing).floor() * spacing;
@@ -132,51 +150,152 @@ fn draw_grid(app: &App, canvas: &mut MapCanvas) {
     }
 }
 
+/// Trace un segment en pointillés : `on` sous-pixels pleins, puis `off` vides.
+fn dashed(
+    canvas: &mut MapCanvas,
+    a: (f64, f64),
+    b: (f64, f64),
+    style: Style,
+    prio: u8,
+    on: f64,
+    off: f64,
+) {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len = dx.hypot(dy);
+    let size = canvas.px_size();
+    if len < 1e-6 || len > 20.0 * (size.0 + size.1) {
+        // Segment démesuré (zoom extrême) : un trait plein, que le canevas rogne.
+        canvas.line(a, b, style, prio, Stroke::Fixed('.'));
+        return;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let mut k = 0.0;
+    while k < len {
+        let end = (k + on).min(len);
+        canvas.line(
+            (a.0 + ux * k, a.1 + uy * k),
+            (a.0 + ux * end, a.1 + uy * end),
+            style,
+            prio,
+            Stroke::Fixed('.'),
+        );
+        k += on + off;
+    }
+}
+
 fn draw_decor(app: &App, canvas: &mut MapCanvas) {
     let size = canvas.px_size();
-    for decor in app.data.countries.iter().flat_map(|c| &c.decor) {
-        let (style, ch) = match decor.kind {
-            DecorKind::River => (app.theme.river, Stroke::Fixed('~')),
-        };
-        for pair in decor.path.windows(2) {
-            let (a, b) = (
-                app.camera.to_px(pair[0], size),
-                app.camera.to_px(pair[1], size),
-            );
-            canvas.line(a, b, style, PRIO_DECOR, ch);
-            if !app.glyphs.ascii && app.camera.scale >= DETAIL_SCALE {
-                canvas.line((a.0, a.1 + 1.0), (b.0, b.1 + 1.0), style, PRIO_DECOR, ch);
+    let scale = app.camera.scale;
+    for country in &app.data.countries {
+        let owned = app.world.has_concession(&country.id);
+        for decor in &country.decor {
+            for pair in decor.path.windows(2) {
+                let (a, b) = (
+                    app.camera.to_px(pair[0], size),
+                    app.camera.to_px(pair[1], size),
+                );
+                match decor.kind {
+                    // Les rivières ne se voient que de près.
+                    DecorKind::River if scale >= SCALE_STATION => {
+                        canvas.line(a, b, app.theme.river, PRIO_DECOR, Stroke::Fixed('~'));
+                    }
+                    DecorKind::River => {}
+                    DecorKind::Border => {
+                        let style = if owned {
+                            app.theme.border_owned
+                        } else {
+                            app.theme.grid
+                        };
+                        canvas.line(a, b, style, PRIO_BORDER, Stroke::Fixed('.'));
+                    }
+                }
             }
         }
     }
 }
 
 fn draw_decor_labels(app: &App, buf: &mut Buffer, area: Rect) {
-    if app.camera.scale < 4.0 {
-        return;
-    }
     let size = app.px_size();
-    for decor in app.data.countries.iter().flat_map(|c| &c.decor) {
-        let (Some(name), Some(first)) = (&decor.name, decor.path.first()) else {
-            continue;
-        };
-        // Étiquette près du deuxième point, pour rester à l'écart du bord du tracé.
-        let anchor = decor.path.get(1).unwrap_or(first);
-        let (cx, cy) = cell_of(app.camera.to_px(*anchor, size));
-        put_centered(buf, area, cx, cy + 1, name, app.theme.river);
+    let scale = app.camera.scale;
+    for country in &app.data.countries {
+        let owned = app.world.has_concession(&country.id);
+        for decor in &country.decor {
+            match decor.kind {
+                DecorKind::River if scale >= SCALE_STATION * 2.0 => {
+                    let (Some(name), Some(anchor)) =
+                        (&decor.name, decor.path.get(1).or(decor.path.first()))
+                    else {
+                        continue;
+                    };
+                    let (cx, cy) = cell_of(app.camera.to_px(*anchor, size));
+                    put_centered(
+                        buf,
+                        area,
+                        area.x as i32 + cx,
+                        area.y as i32 + cy + 1,
+                        name,
+                        app.theme.river,
+                    );
+                }
+                // Nom du pays, en haut de son contour, tant qu'on n'est pas au niveau des gares.
+                DecorKind::Border if scale < SCALE_STATION => {
+                    let n = decor.path.len().max(1) as f64;
+                    let cx = decor.path.iter().map(|p| p[0]).sum::<f64>() / n;
+                    let top = decor.path.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
+                    let (x, y) = cell_of(app.camera.to_px([cx, top], size));
+                    let style = if owned {
+                        app.theme.title
+                    } else {
+                        app.theme.dim
+                    };
+                    let name = country.name.fr.to_uppercase();
+                    put_centered(
+                        buf,
+                        area,
+                        area.x as i32 + x,
+                        area.y as i32 + y - 1,
+                        &name,
+                        style,
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 }
 
 fn draw_tracks(app: &App, canvas: &mut MapCanvas) {
     let size = canvas.px_size();
-    let detailed = !app.glyphs.ascii && app.camera.scale >= DETAIL_SCALE;
+    let detailed = !app.glyphs.ascii && app.camera.scale >= SCALE_RAILS;
     for line in app.data.lines() {
         let Some(path) = app.path(&line.id) else {
             continue;
         };
-        let condition = app.world.lines.get(&line.id).map_or(1.0, |l| l.condition);
+        let state = app.world.lines.get(&line.id);
+        let built = state.is_some_and(|l| l.built);
+        if !built {
+            // Projet : en pointillés, là où la compagnie a une concession.
+            let reachable = app
+                .data
+                .line_countries(line)
+                .iter()
+                .all(|c| app.world.has_concession(&c.id));
+            if reachable && app.camera.scale >= app.country_scale() * 0.5 {
+                for pair in path.points().windows(2) {
+                    let (a, b) = (
+                        app.camera.to_px(pair[0], size),
+                        app.camera.to_px(pair[1], size),
+                    );
+                    dashed(canvas, a, b, app.theme.dim, PRIO_PROJECT, 1.0, 4.0);
+                }
+            }
+            continue;
+        }
+        let condition = state.map_or(1.0, |l| l.condition);
         let style = if condition < app.data.balance.wear_slow_threshold {
             app.theme.track_worn
+        } else if line.id == app.line_id() {
+            app.theme.track_current
         } else {
             app.theme.track
         };
@@ -215,6 +334,7 @@ fn draw_tracks(app: &App, canvas: &mut MapCanvas) {
             let visible = |p: (f64, f64)| {
                 p.0 > -8.0 && p.1 > -8.0 && p.0 < size.0 + 8.0 && p.1 < size.1 + 8.0
             };
+            let stride = 4.0 * (len / 4000.0).ceil().max(1.0);
             let mut k = 0.0;
             while k <= len {
                 let p = (a.0 + ux * k, a.1 + uy * k);
@@ -229,93 +349,159 @@ fn draw_tracks(app: &App, canvas: &mut MapCanvas) {
                     k += 4.0;
                 } else {
                     // Saute rapidement les portions hors champ.
-                    k += 4.0 * ((len / 4000.0).ceil().max(1.0));
+                    k += stride;
                 }
             }
         }
     }
 }
 
+/// Vrai si deux étiquettes (colonne de gauche, ligne, largeur, hauteur) se chevauchent.
+fn overlaps(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> bool {
+    a.0 < b.0 + b.2 + 1 && b.0 < a.0 + a.2 + 1 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
+}
+
 fn draw_stations(app: &App, buf: &mut Buffer, area: Rect) {
+    let country_scale = app.country_scale();
     let size = app.px_size();
-    let modifiers = Modifiers::compute(&app.world.research_done, &app.data);
-    for station in app.data.stations() {
+    let scale = app.camera.scale;
+    let t = &app.theme;
+    let modifiers = app.world.modifiers(&app.data);
+
+    // Les gares desservies et les grandes villes passent d'abord : en cas de
+    // chevauchement, ce sont leurs étiquettes qui restent.
+    let mut stations: Vec<_> = app
+        .data
+        .countries
+        .iter()
+        .flat_map(|c| {
+            c.stations
+                .iter()
+                .enumerate()
+                .map(move |(i, s)| (c, i == 0, s))
+        })
+        .map(|(country, capital, station)| {
+            (
+                app.world.is_served(&app.data, &station.id),
+                country,
+                capital,
+                station,
+            )
+        })
+        .collect();
+    stations.sort_by_key(|(served, _, capital, station)| {
+        (!served, !capital, std::cmp::Reverse(station.population))
+    });
+
+    let mut placed: Vec<(i32, i32, i32, i32)> = Vec::new();
+    for (served, country, capital, station) in stations {
         let (cx, cy) = cell_of(app.camera.to_px(station.pos, size));
-        if cy < -6 || cy > area.height as i32 + 1 || cx < -40 || cx > area.width as i32 + 40 {
+        if cy < -8 || cy > area.height as i32 + 1 || cx < -40 || cx > area.width as i32 + 40 {
+            continue;
+        }
+        let owned = app.world.has_concession(&country.id);
+        // Ce qui s'affiche dépend du niveau de zoom et de l'intérêt de la gare.
+        let named = if served {
+            true
+        } else if owned {
+            scale >= country_scale || capital
+        } else {
+            capital && scale >= country_scale
+        };
+        if !served && !named {
             continue;
         }
         let (x, y) = (area.x as i32 + cx, area.y as i32 + cy);
-        if app.glyphs.ascii {
-            put_str(buf, area, x - 1, y, "(O)", app.theme.station);
+        let (marker, style) = if served {
+            (app.glyphs.station, t.station)
         } else {
-            put_str(
-                buf,
-                area,
-                x,
-                y,
-                &app.glyphs.station.to_string(),
-                app.theme.station,
-            );
-        }
-        put_centered(
-            buf,
-            area,
-            x,
-            y + 1,
-            &station.name.to_uppercase(),
-            app.theme.station,
-        );
-        if app.camera.scale < 2.5 {
+            (app.glyphs.station_idle, t.dim)
+        };
+        put_str(buf, area, x, y, &marker.to_string(), style);
+        if !named {
             continue;
         }
-        let waiting = app
-            .world
-            .stations
-            .get(&station.id)
-            .map_or(0.0, |s| s.waiting);
-        put_centered(
-            buf,
-            area,
-            x,
-            y + 2,
-            &format!("{} en attente", waiting.floor() as u32),
-            app.theme.dim,
-        );
 
-        // Trains à quai dans cette gare.
-        let mut row = y + 3;
-        for (index, train) in app.world.trains.iter().enumerate() {
-            let (Some(line), Some(loco)) =
-                (app.data.line(&train.line), app.data.locomotive(&train.loco))
-            else {
-                continue;
-            };
-            if !train.is_docked() || train.dir.origin(line) != station.id {
-                continue;
+        let mut lines: Vec<(String, Style)> = vec![(station.name.to_uppercase(), style)];
+        if served && scale >= country_scale {
+            let state = app.world.stations.get(&station.id);
+            let waiting = state.map_or(0.0, |s| s.total());
+            lines.push((format!("{} en attente", waiting.floor() as u32), t.dim));
+            if scale >= SCALE_STATION {
+                // Détail par catégorie de trafic : « N12 T3 A2 F8 ».
+                let detail: Vec<String> = app
+                    .data
+                    .traffic
+                    .iter()
+                    .map(|c| {
+                        let n = state
+                            .and_then(|s| s.waiting.get(&c.id))
+                            .map_or(0, |w| w.floor() as u32);
+                        format!("{}{n}", c.symbol)
+                    })
+                    .collect();
+                lines.push((detail.join(" "), t.dim));
+
+                // Trains à quai dans cette gare (les premiers seulement dans un grand nœud).
+                let docked: Vec<_> = app
+                    .world
+                    .trains
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, train)| {
+                        train.is_docked()
+                            && app
+                                .data
+                                .line(&train.line)
+                                .is_some_and(|l| train.dir.origin(l) == station.id)
+                    })
+                    .collect();
+                for (index, train) in docked.iter().take(6) {
+                    let selected = app.selected == Some(train.id);
+                    let capacity = app
+                        .data
+                        .locomotive(&train.loco)
+                        .map_or(0, |l| modifiers.capacity_of(l));
+                    let text = format!(
+                        "{} {} {}/{capacity} ",
+                        if selected { app.glyphs.cursor } else { " " },
+                        app.train_name(train),
+                        train.count(),
+                    );
+                    let style = if selected {
+                        t.train(*index).patch(t.selected)
+                    } else {
+                        t.train(*index)
+                    };
+                    lines.push((text, style));
+                }
+                if docked.len() > 6 {
+                    lines.push((format!("et {} autres à quai", docked.len() - 6), t.dim));
+                }
             }
-            let selected = app.selected == Some(train.id);
-            let text = format!(
-                "{} {} {}/{} ",
-                if selected { app.glyphs.cursor } else { " " },
-                app.train_name(train),
-                train.passengers,
-                modifiers.capacity_of(loco)
-            );
-            let style = if selected {
-                app.theme.train(index).patch(app.theme.selected)
-            } else {
-                app.theme.train(index)
-            };
-            put_centered(buf, area, x, row, &text, style);
-            row += 1;
+        }
+
+        let width = lines
+            .iter()
+            .map(|(text, _)| text.chars().count() as i32)
+            .max()
+            .unwrap_or(0);
+        let rect = (x - width / 2, y + 1, width, lines.len() as i32);
+        if placed.iter().any(|other| overlaps(rect, *other)) {
+            continue;
+        }
+        placed.push(rect);
+        for (row, (text, style)) in lines.iter().enumerate() {
+            put_centered(buf, area, x, y + 1 + row as i32, text, *style);
         }
     }
 }
 
 fn draw_trains(app: &App, buf: &mut Buffer, area: Rect) {
+    let country_scale = app.country_scale();
     let size = app.px_size();
     let cam = &app.camera;
-    let modifiers = Modifiers::compute(&app.world.research_done, &app.data);
+    let modifiers = app.world.modifiers(&app.data);
     for (index, train) in app.world.trains.iter().enumerate() {
         if train.is_docked() {
             continue;
@@ -344,7 +530,7 @@ fn draw_trains(app: &App, buf: &mut Buffer, area: Rect) {
 
         // Wagons : on remonte le tracé sous-pixel par sous-pixel et on garde
         // les cellules distinctes, pour un convoi continu quelle que soit la pente.
-        let wagons = if cam.scale < 3.0 {
+        let wagons = if cam.scale < SCALE_STATION {
             0
         } else {
             (loco.capacity / 12).clamp(1, 6) as usize
@@ -383,7 +569,18 @@ fn draw_trains(app: &App, buf: &mut Buffer, area: Rect) {
             style,
         );
 
-        if cam.scale < 3.0 {
+        if cam.scale < SCALE_STATION {
+            // De loin, seul le train sélectionné garde son nom.
+            if selected && cam.scale >= country_scale {
+                put_str(
+                    buf,
+                    area,
+                    x + 2,
+                    y - 1,
+                    &app.train_name(train),
+                    app.theme.train(index),
+                );
+            }
             continue;
         }
         // Panache de fumée qui traîne derrière la machine.
@@ -403,14 +600,14 @@ fn draw_trains(app: &App, buf: &mut Buffer, area: Rect) {
         let label = format!(
             "{} {}/{}",
             app.train_name(train),
-            train.passengers,
+            train.count(),
             modifiers.capacity_of(loco)
         );
         put_str(buf, area, x + 2, y - 1, &label, app.theme.train(index));
     }
 }
 
-fn fill_row(buf: &mut Buffer, area: Rect, y: u16, style: Style) {
+pub fn fill_row(buf: &mut Buffer, area: Rect, y: u16, style: Style) {
     for x in area.x..area.right() {
         if let Some(cell) = buf.cell_mut((x, y)) {
             cell.reset();
@@ -436,8 +633,9 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
     let (hour, minute) = app.world.time_of_day();
     let income = app.world.income_per_game_second() * b.time_scale;
     let income_style = if income > -0.05 { t.good } else { t.warn };
-    let line_id = &b.start_line;
-    let max_trains = app.data.line(line_id).map_or(0, |l| l.max_trains);
+    let line_id = app.line_id();
+    let max_trains = app.world.line_capacity(&app.data, line_id);
+    let era = app.world.era(&app.data);
     let condition = app.world.lines.get(line_id).map_or(1.0, |l| l.condition);
     let track_style = if condition < b.wear_slow_threshold {
         t.warn
@@ -445,12 +643,30 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
         t.hud
     };
 
-    let mut spans = vec![
-        (" RAINHILL ".to_string(), t.hud_title),
+    let satisfaction = app.world.overall_satisfaction(&app.data);
+    let mood_style = if satisfaction >= 0.6 {
+        t.good
+    } else if satisfaction < 0.4 {
+        t.warn
+    } else {
+        t.hud
+    };
+    // Le nom du jeu ne s'affiche que s'il reste de la place pour l'essentiel.
+    let mut spans = Vec::new();
+    if area.width >= 140 {
+        spans.push((" RAINHILL ".to_string(), t.hud_title));
+    }
+    spans.extend([
         (
-            format!(" Jour {} {hour:02}:{minute:02}", app.world.day()),
-            t.hud,
+            format!(
+                " {} {} {}",
+                app.world.year(&app.data),
+                app.glyphs.bullet,
+                era.name.fr
+            ),
+            t.hud.patch(t.title),
         ),
+        (format!("  {hour:02}:{minute:02}"), t.hud),
         sep.clone(),
         (format::money(app.world.money), t.hud.patch(t.money)),
         sep.clone(),
@@ -472,25 +688,46 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
             format!("Voie {}", format::percent(condition)),
             t.hud.patch(track_style),
         ),
-    ];
+        sep.clone(),
+        (
+            format!("Clients {}", format::percent(satisfaction)),
+            t.hud.patch(mood_style),
+        ),
+    ]);
+    // Stocks de combustible, quand l'époque oblige à les gérer.
+    if era.rules.fuel_market {
+        for fuel in app.data.fuels.iter().filter(|f| f.stock) {
+            let burn = app.world.fuel_burn_per_hour(&app.data, &fuel.id);
+            if burn <= 0.0 {
+                continue;
+            }
+            let stock = app.world.fuel_stock(&fuel.id);
+            let style = if stock < burn * 2.0 { t.warn } else { t.hud };
+            spans.push(sep.clone());
+            spans.push((
+                format!("{} {} {}", fuel.name.fr, format::quantity(stock), fuel.unit),
+                t.hud.patch(style),
+            ));
+        }
+    }
     if let Some(active) = &app.world.research_active
         && let Some(research) = app.data.research(&active.id)
     {
         let progress = active.progress_s / (research.duration_h * 3600.0);
         spans.push(sep.clone());
         spans.push((
-            format!(
-                "Recherche : {} {}",
-                research.name.fr,
-                format::percent(progress)
-            ),
+            format!("{} {}", research.name.fr, format::percent(progress)),
             t.hud,
         ));
     }
     put_spans(buf, area, area.x as i32, area.y as i32, &spans);
 
-    if app.paused {
-        let text = " PAUSE ";
+    if app.paused || app.read_only {
+        let text = if app.read_only {
+            " LECTURE SEULE "
+        } else {
+            " PAUSE "
+        };
         put_str(
             buf,
             area,
@@ -528,16 +765,20 @@ fn draw_bottom_bar(app: &App, buf: &mut Buffer, area: Rect) {
     let keys = [
         ("d", "départ"),
         ("espace", "tous"),
-        ("tab", "train"),
+        ("n", "réseau"),
         ("a", "acheter"),
         ("r", "recherche"),
+        ("e", "époque"),
+        ("u", "voie"),
+        ("c", "combustible"),
+        ("t", "tarifs"),
+        ("g", "personnel"),
+        ("o", "compagnie"),
+        ("v", "flotte"),
+        ("b", "tableau"),
         ("m", "réparer"),
         ("?", "aide"),
         ("q", "quitter"),
-        ("f", "suivre"),
-        ("+/-", "zoom"),
-        ("flèches", "carte"),
-        ("0", "recadrer"),
     ];
     let mut spans = Vec::new();
     for (key, label) in keys {
@@ -547,7 +788,12 @@ fn draw_bottom_bar(app: &App, buf: &mut Buffer, area: Rect) {
     put_spans(buf, area, area.x as i32, y as i32, &spans);
 
     if area.height > 3 {
-        let zoom = format!(" zoom ×{} ", format::dec1(app.camera.scale / app.fit_scale));
+        let line = app.data.line(app.line_id()).map_or("", |l| l.name.as_str());
+        let zoom = format!(
+            " {line} {} vue {} ",
+            app.glyphs.bullet,
+            view_name(app.camera.scale, app.country_scale())
+        );
         let follow = if app.follow { "suivi " } else { "" };
         let text = format!("{follow}{zoom}");
         put_str(
@@ -590,7 +836,7 @@ fn draw_log(app: &App, buf: &mut Buffer, area: Rect) {
 }
 
 fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
-    const WIDTH: u16 = 38;
+    const WIDTH: u16 = 52;
     if area.width < WIDTH + 30 || area.height < 14 {
         return;
     }
@@ -609,7 +855,7 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
     };
     let t = &app.theme;
     let g = &app.glyphs;
-    let modifiers = Modifiers::compute(&app.world.research_done, &app.data);
+    let modifiers = app.world.modifiers(&app.data);
     let capacity = modifiers.capacity_of(loco);
     let name = |id: &str| {
         app.data
@@ -619,16 +865,25 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
     let origin = name(train.dir.origin(line));
     let destination = name(train.dir.destination(line));
 
+    let clock = app.world.clock;
     let (status, detail) = match train.state {
-        TrainState::AtStation { waited } => (
-            format!("À quai à {origin} {} {destination}", g.arrow),
-            format!("Embarquement depuis {} min", (waited / 60.0) as u32),
-        ),
+        TrainState::AtStation { .. } => {
+            let (h, m) = crate::sim::hour_minute(train.sched_departure);
+            let late_min = ((clock - train.sched_departure) / 60.0) as i64;
+            (
+                format!("À quai à {origin} {} {destination}", g.arrow),
+                if late_min >= 1 {
+                    format!(
+                        "Départ prévu {h:02}:{m:02}  {} retard {late_min} min",
+                        g.bullet
+                    )
+                } else {
+                    format!("Départ prévu {h:02}:{m:02}")
+                },
+            )
+        }
         TrainState::Moving => {
-            let condition = app.world.lines.get(&line.id).map_or(1.0, |l| l.condition);
-            let speed = loco.top_speed_kmh
-                * modifiers.speed
-                * condition_factor(condition, &app.data.balance);
+            let speed = train.speed_kmh(clock);
             let done = match train.dir {
                 crate::sim::Dir::Outbound => train.pos_km,
                 crate::sim::Dir::Inbound => line.length_km - train.pos_km,
@@ -645,18 +900,32 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
             )
         }
     };
-    let load = train.passengers as f64 / capacity as f64;
+    let load = train.count() as f64 / capacity as f64;
+    let late = train.is_docked() && clock - train.sched_departure >= 60.0;
+    let by_class: Vec<String> = app
+        .data
+        .traffic
+        .iter()
+        .map(|c| {
+            format!(
+                "{} {}",
+                c.name.fr,
+                train.load.get(&c.id).copied().unwrap_or(0)
+            )
+        })
+        .collect();
     let lines = vec![
         Line::styled(status, t.text),
-        Line::styled(detail, t.dim),
+        Line::styled(detail, if late { t.warn } else { t.dim }),
         Line::from(vec![
-            Span::styled("Voyageurs ", t.dim),
+            Span::styled("Charge ", t.dim),
             Span::styled(
                 format::gauge(load, 12, g.gauge_full, g.gauge_empty),
                 t.train(index),
             ),
-            Span::styled(format!(" {}/{capacity}", train.passengers), t.text),
+            Span::styled(format!(" {}/{capacity}", train.count()), t.text),
         ]),
+        Line::styled(by_class.join(format!(" {} ", g.bullet).as_str()), t.dim),
     ];
     let rect = Rect::new(
         area.right() - WIDTH,

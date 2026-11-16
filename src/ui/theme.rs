@@ -21,6 +21,10 @@ pub struct Theme {
     pub river: Style,
     pub track: Style,
     pub track_worn: Style,
+    /// Ligne sur laquelle portent les commandes.
+    pub track_current: Style,
+    /// Contour d'un pays où la compagnie est installée.
+    pub border_owned: Style,
     pub station: Style,
     pub money: Style,
     pub good: Style,
@@ -29,6 +33,12 @@ pub struct Theme {
     pub smoke: Style,
     pub border: Style,
     pub trains: Vec<Style>,
+    /// Tableau des départs : fond, titres, palettes.
+    pub board: Style,
+    pub board_title: Style,
+    pub board_header: Style,
+    pub flap: Style,
+    pub flap_late: Style,
 }
 
 fn fg(index: u8) -> Style {
@@ -55,6 +65,8 @@ impl Theme {
                 river: fg(31),
                 track: fg(250),
                 track_worn: fg(167),
+                track_current: fg(222).add_modifier(Modifier::BOLD),
+                border_owned: fg(244),
                 station: fg(231).add_modifier(Modifier::BOLD),
                 money: fg(220).add_modifier(Modifier::BOLD),
                 good: fg(114),
@@ -66,6 +78,20 @@ impl Theme {
                     .into_iter()
                     .map(|c| fg(c).add_modifier(Modifier::BOLD))
                     .collect(),
+                board: Style::new().fg(Color::Indexed(250)).bg(Color::Indexed(16)),
+                board_title: Style::new()
+                    .fg(Color::Indexed(231))
+                    .bg(Color::Indexed(16))
+                    .add_modifier(Modifier::BOLD),
+                board_header: Style::new().fg(Color::Indexed(244)).bg(Color::Indexed(16)),
+                flap: Style::new()
+                    .fg(Color::Indexed(220))
+                    .bg(Color::Indexed(234))
+                    .add_modifier(Modifier::BOLD),
+                flap_late: Style::new()
+                    .fg(Color::Indexed(203))
+                    .bg(Color::Indexed(234))
+                    .add_modifier(Modifier::BOLD),
             },
             // Okabe-Ito : distinguable pour les principales formes de daltonisme.
             ColorMode::Colorblind => Theme {
@@ -85,6 +111,8 @@ impl Theme {
                 river: fg(32),
                 track: fg(253),
                 track_worn: fg(202).add_modifier(Modifier::BOLD),
+                track_current: fg(227).add_modifier(Modifier::BOLD),
+                border_owned: fg(246),
                 station: fg(231).add_modifier(Modifier::BOLD),
                 money: fg(227).add_modifier(Modifier::BOLD),
                 good: fg(81),
@@ -96,6 +124,20 @@ impl Theme {
                     .into_iter()
                     .map(|c| fg(c).add_modifier(Modifier::BOLD))
                     .collect(),
+                board: Style::new().fg(Color::Indexed(250)).bg(Color::Indexed(16)),
+                board_title: Style::new()
+                    .fg(Color::Indexed(231))
+                    .bg(Color::Indexed(16))
+                    .add_modifier(Modifier::BOLD),
+                board_header: Style::new().fg(Color::Indexed(244)).bg(Color::Indexed(16)),
+                flap: Style::new()
+                    .fg(Color::Indexed(227))
+                    .bg(Color::Indexed(234))
+                    .add_modifier(Modifier::BOLD),
+                flap_late: Style::new()
+                    .fg(Color::Indexed(202))
+                    .bg(Color::Indexed(234))
+                    .add_modifier(Modifier::BOLD),
             },
             ColorMode::NoColor => {
                 let plain = Style::new();
@@ -113,6 +155,8 @@ impl Theme {
                     river: dim,
                     track: plain,
                     track_worn: bold,
+                    track_current: bold,
+                    border_owned: plain,
                     station: bold,
                     money: bold,
                     good: plain,
@@ -121,6 +165,11 @@ impl Theme {
                     smoke: dim,
                     border: plain,
                     trains: vec![bold],
+                    board: plain,
+                    board_title: bold,
+                    board_header: dim,
+                    flap: bold,
+                    flap_late: bold.add_modifier(Modifier::UNDERLINED),
                 }
             }
         }

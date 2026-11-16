@@ -1,0 +1,63 @@
+# Catégories de trafic : voyageurs et fret.
+#
+# share              part de la demande de base d'une gare
+# fare_mult          multiplicateur du tarif de base
+# elasticity         sensibilité au prix : demande × prix^(-elasticity)
+# *_weight           ce qui compte pour la satisfaction (pondérations relatives)
+# hourly             multiplicateur de demande pour chacune des 24 heures (0 h à 23 h)
+
+[[class]]
+id                 = "commuter"
+name               = { fr = "Navetteurs", en = "Commuters" }
+symbol             = "N"
+unit               = "voy."
+share              = 0.45
+fare_mult          = 0.6
+elasticity         = 1.4
+comfort_weight     = 0.15
+punctuality_weight = 0.45
+crowding_weight    = 0.40
+hourly = [0.1, 0.1, 0.1, 0.1, 0.1, 0.4, 1.2, 2.8, 2.8, 1.0, 0.6, 0.6,
+          0.6, 0.6, 0.6, 0.6, 1.2, 2.8, 2.8, 1.2, 0.5, 0.3, 0.2, 0.1]
+
+[[class]]
+id                 = "tourist"
+name               = { fr = "Touristes", en = "Tourists" }
+symbol             = "T"
+unit               = "voy."
+share              = 0.20
+fare_mult          = 1.2
+elasticity         = 1.0
+comfort_weight     = 0.60
+punctuality_weight = 0.15
+crowding_weight    = 0.25
+hourly = [0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.3, 0.6, 1.2, 1.8, 2.0, 2.0,
+          1.8, 1.8, 2.0, 2.0, 1.8, 1.5, 1.2, 0.8, 0.5, 0.3, 0.2, 0.1]
+
+[[class]]
+id                 = "business"
+name               = { fr = "Affaires", en = "Business" }
+symbol             = "A"
+unit               = "voy."
+share              = 0.15
+fare_mult          = 2.0
+elasticity         = 0.5
+comfort_weight     = 0.25
+punctuality_weight = 0.65
+crowding_weight    = 0.10
+hourly = [0.1, 0.1, 0.1, 0.1, 0.2, 0.6, 2.0, 2.2, 2.0, 1.2, 0.8, 0.8,
+          0.8, 0.8, 0.8, 1.0, 1.8, 2.0, 1.8, 1.4, 0.8, 0.4, 0.2, 0.1]
+
+[[class]]
+id                 = "freight"
+name               = { fr = "Fret", en = "Freight" }
+symbol             = "F"
+unit               = "t"
+share              = 0.20
+fare_mult          = 0.8
+elasticity         = 0.8
+comfort_weight     = 0.0
+punctuality_weight = 1.0
+crowding_weight    = 0.0
+hourly = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+          1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
