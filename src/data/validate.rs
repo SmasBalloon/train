@@ -298,13 +298,13 @@ impl GameData {
                     }
                 }
             }
-            for d in &c.decor {
-                if d.path.len() < 2 {
-                    bail!(
-                        "pays « {} » : un décor doit avoir au moins deux points",
-                        c.id
-                    );
-                }
+            if let Some(iso) = &c.iso
+                && !self.atlas.has_code(iso)
+            {
+                bail!(
+                    "pays « {} » : code « {iso} » absent du fond de carte (world.txt)",
+                    c.id
+                );
             }
         }
         Ok(())

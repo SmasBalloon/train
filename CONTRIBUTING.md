@@ -61,6 +61,10 @@ correctif vient avec un **test** qui la vérifie.
   époques, équilibrage…). Un changement d'équilibrage se fait là, pas dans le
   code. Les données sont validées au chargement (`src/data/validate.rs`) :
   ajoute une validation pour tout nouveau champ.
+- **`data/world.txt`** : le fond de carte (Europe), généré à partir de
+  [Natural Earth](https://www.naturalearthdata.com) par `tools/world.py` : ne
+  pas le modifier à la main, mais régénérer (le mode d'emploi est en tête du
+  script).
 - **Sauvegarde** : si tu modifies la structure de `World`, donne aux nouveaux
   champs une valeur par défaut (`#[serde(default)]`) et complète
   `World::reconcile`, pour que les parties existantes continuent de se charger.

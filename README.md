@@ -38,7 +38,7 @@ rail --new        # recommence une partie (l'ancienne est gardée en save.dat.ba
 | `rail map`      | carte du réseau en direct, trains animés                     |
 | `rail board`    | tableau des départs et arrivées, façon gare                  |
 | `rail fleet`    | ouvre directement la flotte                                  |
-| `rail research` | ouvre directement l'arbre de recherche                       |
+| `rail research` | ouvre directement la liste des recherches                    |
 | `rail upgrade`  | ouvre directement les améliorations de ligne                 |
 | `rail status`   | une ligne d'état (argent, trains en route, revenu) pour un prompt ou tmux |
 
@@ -84,7 +84,7 @@ s'affiche. Une seconde réelle vaut une minute de jeu.
 | `v`                       | flotte : revendre, remplacer une machine                  |
 | `s`                       | équipages : recruter, affecter au train sélectionné       |
 | `i`                       | formations : programmer une session, inscrire des équipiers |
-| `r`                       | bureau d'études : arbre de recherche                      |
+| `r`                       | bureau d'études : liste des recherches                    |
 | `n`                       | réseau : concessions, lignes à construire                 |
 | `e`                       | époques : conditions pour passer à la suivante            |
 | `u`                       | améliorations de la ligne (rails, caténaire…)             |
@@ -180,7 +180,13 @@ fichiers du même nom dans le sous-dossier `mods/` du dossier de données :
 
 - `balance.toml` et `crew.toml` se surchargent **clé par clé** ;
 - les listes (locomotives, recherches, pays…) **remplacent ou ajoutent** les
-  entrées qui portent le même identifiant.
+  entrées qui portent le même identifiant ;
+- `world.txt` (le fond de carte) se remplace **en entier**.
+
+Les positions sont géographiques : une gare a des coordonnées
+`coord = [longitude, latitude]`, et un pays un `iso` (code ADM0_A3 de Natural
+Earth : `GBR`, `FRA`…) qui colore son territoire. Pour un pays hors de l'Europe
+fournie, régénère le fond de carte avec `tools/world.py` en élargissant sa zone.
 
 Les données sont validées au chargement : une erreur indique le fichier et la
 valeur en cause.
@@ -212,6 +218,10 @@ Rainhill est distribué sous la **Rainhill Terminal License 1.0** (voir
 - la mention de copyright et la licence doivent accompagner toute copie.
 
 Ce résumé n'a pas de valeur juridique : seul le texte de `LICENSE` fait foi.
+
+La carte est dessinée à partir des données de
+[Natural Earth](https://www.naturalearthdata.com) (domaine public), converties
+par `tools/world.py`.
 
 L'animation de transition reprend les dessins et le mouvement de la fumée de
 `sl` : Copyright 1993,1998,2014 Toyoda Masashi (mtoyoda@acm.org). « Everyone

@@ -16,7 +16,7 @@ use super::format;
 use super::glyphs::Glyphs;
 use super::sl;
 use super::theme::{ColorMode, Theme};
-use super::{map, popups, tree};
+use super::{map, popups};
 
 /// Durée d'affichage d'un message du journal, en secondes réelles.
 pub const LOG_TTL: f64 = 12.0;
@@ -48,10 +48,6 @@ pub enum Popup {
     Research {
         sel: usize,
         branch: Option<Branch>,
-    },
-    /// Arbre de recherche dessiné : `sel` est le rang de la recherche dans les données.
-    Tree {
-        sel: usize,
     },
     /// Tarifs et horaires.
     Manage {
@@ -177,8 +173,6 @@ pub struct App {
     paths: HashMap<String, Polyline>,
     /// Ligne sur laquelle portent les commandes (achats, tarifs, améliorations).
     line: String,
-    /// Orientation de l'arbre de recherche : époques de haut en bas, ou de gauche à droite.
-    pub tree_vertical: bool,
     /// Animations de transition activées (touche S).
     pub transitions: bool,
     /// Début (horloge de l'interface) de la transition en cours.
@@ -227,7 +221,6 @@ impl App {
             drag: None,
             paths,
             line,
-            tree_vertical: true,
             transitions: opts.transitions,
             transition: None,
             settings_dirty: false,
@@ -1200,29 +1193,15 @@ impl App {
     }
 
     /// Ouvre l'arbre de recherche sur la recherche en cours, sinon sur la première.
-    pub fn open_tree(&mut self) {
+    /// Ouvre le bureau d'études, sur la recherche en cours s'il y en a une.
+    pub fn open_research(&mut self) {
         let sel = self
             .world
             .research_active
             .as_ref()
-            .and_then(|a| self.data.research.iter().position(|r| r.id == a.id))
+            .and_then(|a| self.research_items(None).iter().position(|r| r.id == a.id))
             .unwrap_or(0);
-        self.open(Popup::Tree { sel });
-    }
-
-    /// Lance la recherche de rang `index` dans les données.
-    fn research_at(&mut self, index: usize) {
-        let Some(research) = self.data.research.get(index) else {
-            return;
-        };
-        let (id, name) = (research.id.clone(), research.name.fr.clone());
-        match self.world.start_research(&self.data, &id) {
-            Ok(()) => {
-                self.popup_msg = None;
-                self.push_log(format!("Recherche lancée : {name}"), LogKind::Info);
-            }
-            Err(e) => self.popup_msg = Some(e.to_string()),
-        }
+        self.open(Popup::Research { sel, branch: None });
     }
 
     pub fn open(&mut self, popup: Popup) {
@@ -1351,49 +1330,6 @@ impl App {
                 } else if let Some(sel) = move_selection(code, sel, self.data.locomotives.len()) {
                     self.open(Popup::Shop { sel, qty });
                 }
-            }
-            Popup::Tree { sel } => {
-                let direction = match code {
-                    KeyCode::Left | KeyCode::Char('h') => Some(tree::Move::Left),
-                    KeyCode::Right | KeyCode::Char('l') => Some(tree::Move::Right),
-                    KeyCode::Up | KeyCode::Char('k') => Some(tree::Move::Up),
-                    KeyCode::Down | KeyCode::Char('j') => Some(tree::Move::Down),
-                    _ => None,
-                };
-                if confirms {
-                    self.research_at(sel);
-                } else if code == KeyCode::Tab {
-                    self.tree_vertical = !self.tree_vertical;
-                } else if code == KeyCode::Char('v') {
-                    // Vue en liste, sur la même recherche.
-                    let sel = self
-                        .data
-                        .research
-                        .get(sel)
-                        .and_then(|r| {
-                            self.research_items(None)
-                                .iter()
-                                .position(|item| item.id == r.id)
-                        })
-                        .unwrap_or(0);
-                    self.open(Popup::Research { sel, branch: None });
-                } else if closes || code == KeyCode::Char('r') {
-                    self.popup = Popup::None;
-                } else if let Some(direction) = direction {
-                    let layout = tree::TreeLayout::new(&self.data);
-                    if let Some(sel) = tree::step(&layout, sel, direction, self.tree_vertical) {
-                        self.open(Popup::Tree { sel });
-                    }
-                }
-            }
-            Popup::Research { sel, branch } if code == KeyCode::Char('v') => {
-                // Retour à l'arbre, sur la même recherche.
-                let sel = self
-                    .research_items(branch)
-                    .get(sel)
-                    .and_then(|item| self.data.research.iter().position(|r| r.id == item.id))
-                    .unwrap_or(0);
-                self.open(Popup::Tree { sel });
             }
             Popup::Research { sel, branch } => {
                 if confirms {
@@ -1646,7 +1582,7 @@ impl App {
             KeyCode::Tab => self.select_next(1),
             KeyCode::BackTab => self.select_next(-1),
             KeyCode::Char('a') => self.open(Popup::Shop { sel: 0, qty: 1 }),
-            KeyCode::Char('r') => self.open_tree(),
+            KeyCode::Char('r') => self.open_research(),
             KeyCode::Char('t') => self.open(Popup::Manage { sel: 0 }),
             KeyCode::Char('e') => self.open(Popup::Eras {
                 sel: self.world.era_index(&self.data),

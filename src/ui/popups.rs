@@ -20,7 +20,6 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::None => {}
         Popup::Shop { sel, qty } => draw_shop(app, buf, area, sel, qty),
         Popup::Research { sel, branch } => draw_research(app, buf, area, sel, branch),
-        Popup::Tree { sel } => super::tree::draw(app, buf, area, sel),
         Popup::Manage { sel } => draw_manage(app, buf, area, sel),
         Popup::Eras { sel } => draw_eras(app, buf, area, sel),
         Popup::Upgrades { sel } => draw_upgrades(app, buf, area, sel),
@@ -494,14 +493,7 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
     let g = &app.glyphs;
     let items = app.research_items(branch);
     let time_scale = app.data.balance.time_scale;
-    let inner = window(
-        app,
-        buf,
-        area,
-        "Bureau d'études : arbre de recherche",
-        104,
-        34,
-    );
+    let inner = window(app, buf, area, "Bureau d'études : recherches", 104, 34);
     let list_height = (items.len() as u16 + 1)
         .min(inner.height.saturating_sub(4) / 2)
         .max(1);
@@ -583,7 +575,7 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
         app,
         buf,
         foot,
-        "Entrée : lancer    haut/bas : choisir    Tab : branche    v : vue en arbre    Échap : fermer",
+        "Entrée : lancer    haut/bas : choisir    Tab : branche    Échap : fermer",
     );
 }
 
@@ -2333,7 +2325,7 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("Espace", "donner le départ à tous les trains prêts"),
         ("Tab", "sélectionner le train suivant"),
         ("a", "dépôt : acheter une locomotive, lire sa fiche"),
-        ("r", "bureau d'études : arbre de recherche"),
+        ("r", "bureau d'études : liste des recherches"),
         (
             "n",
             "réseau : concessions, lignes à construire, ligne courante",

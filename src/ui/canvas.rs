@@ -1,5 +1,6 @@
 //! Tracé vectoriel de la carte : points braille (2×4 par cellule) en Unicode,
-//! caractères `- | / \` choisis selon la pente en ASCII.
+//! caractères `- | / \` choisis selon la pente en ASCII. Le fond de carte est
+//! toujours dessiné en caractères ASCII, quel que soit le mode.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -14,6 +15,8 @@ struct Cell {
     ch: Option<char>,
     style: Style,
     prio: u8,
+    /// Caractère affiché tel quel, même en mode Unicode (fond de carte).
+    text: bool,
 }
 
 /// Rendu d'un segment en mode ASCII.
@@ -48,7 +51,7 @@ impl MapCanvas {
         (self.w as f64 * 2.0, self.h as f64 * 4.0)
     }
 
-    fn plot(&mut self, x: f64, y: f64, ch: char, style: Style, prio: u8) {
+    fn plot_as(&mut self, x: f64, y: f64, ch: char, style: Style, prio: u8, text: bool) {
         if x < 0.0 || y < 0.0 {
             return;
         }
@@ -68,11 +71,20 @@ impl MapCanvas {
         cell.prio = prio;
         cell.style = style;
         cell.ch = Some(ch);
+        cell.text = text;
         cell.bits |= BRAILLE[py % 4][px % 2];
     }
 
+    #[cfg(test)]
     pub fn point(&mut self, x: f64, y: f64, style: Style, prio: u8) {
-        self.plot(x, y, '.', style, prio);
+        self.plot_as(x, y, '.', style, prio, false);
+    }
+
+    /// Remplit une cellule entière d'un caractère (fond de carte).
+    pub fn glyph(&mut self, cx: usize, cy: usize, ch: char, style: Style, prio: u8) {
+        if cx < self.w && cy < self.h {
+            self.plot_as((cx * 2) as f64, (cy * 4) as f64, ch, style, prio, true);
+        }
     }
 
     /// Segment entre deux points en sous-pixels. `stroke` décide du caractère
@@ -84,6 +96,31 @@ impl MapCanvas {
         style: Style,
         prio: u8,
         stroke: Stroke,
+    ) {
+        self.segment(from, to, style, prio, stroke, false);
+    }
+
+    /// Segment toujours dessiné en caractères ASCII, même en mode Unicode
+    /// (côtes, frontières et fleuves du fond de carte).
+    pub fn text_line(
+        &mut self,
+        from: (f64, f64),
+        to: (f64, f64),
+        style: Style,
+        prio: u8,
+        stroke: Stroke,
+    ) {
+        self.segment(from, to, style, prio, stroke, true);
+    }
+
+    fn segment(
+        &mut self,
+        from: (f64, f64),
+        to: (f64, f64),
+        style: Style,
+        prio: u8,
+        stroke: Stroke,
+        text: bool,
     ) {
         let ch = match stroke {
             Stroke::Slope(horizontal) => ascii_char(to.0 - from.0, to.1 - from.1, horizontal),
@@ -97,7 +134,7 @@ impl MapCanvas {
         let steps = dx.abs().max(dy.abs()).ceil().max(1.0);
         for i in 0..=steps as usize {
             let t = i as f64 / steps;
-            self.plot(a.0 + dx * t, a.1 + dy * t, ch, style, prio);
+            self.plot_as(a.0 + dx * t, a.1 + dy * t, ch, style, prio, text);
         }
     }
 
@@ -108,6 +145,7 @@ impl MapCanvas {
                 let ch = match (self.ascii, cell.ch) {
                     (_, None) => continue,
                     (true, Some(ch)) => ch,
+                    (false, Some(ch)) if cell.text => ch,
                     (false, Some(_)) => char::from_u32(0x2800 + cell.bits as u32).unwrap_or(' '),
                 };
                 if let Some(target) = buf.cell_mut((area.x + cx as u16, area.y + cy as u16)) {

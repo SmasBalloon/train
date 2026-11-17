@@ -1,7 +1,10 @@
 //! Données de jeu : chargées depuis des fichiers TOML embarqués dans le
 //! binaire, puis complétées ou remplacées par les fichiers du dossier `mods/`.
 
+mod atlas;
 mod validate;
+
+pub use atlas::{Atlas, Region, River, project};
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,7 +15,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 /// Fichiers de données, dans l'ordre de chargement, avec leur contenu embarqué.
-pub const FILES: [(&str, &str); 12] = [
+pub const FILES: [(&str, &str); 13] = [
     ("balance.toml", include_str!("../../data/balance.toml")),
     ("eras.toml", include_str!("../../data/eras.toml")),
     ("fuels.toml", include_str!("../../data/fuels.toml")),
@@ -28,6 +31,8 @@ pub const FILES: [(&str, &str); 12] = [
     ("staff.toml", include_str!("../../data/staff.toml")),
     ("prestige.toml", include_str!("../../data/prestige.toml")),
     ("crew.toml", include_str!("../../data/crew.toml")),
+    // Fond de carte (Natural Earth), généré par tools/world.py.
+    ("world.txt", include_str!("../../data/world.txt")),
 ];
 
 /// Texte traduit. Le français est obligatoire, l'anglais facultatif.
@@ -477,6 +482,9 @@ pub struct GameEvent {
 pub struct Station {
     pub id: String,
     pub name: String,
+    /// Position sur la carte. Dans le fichier : `coord = [longitude, latitude]`,
+    /// projetée au chargement (voir `atlas::project`).
+    #[serde(rename = "coord")]
     pub pos: [f64; 2],
     pub population: u32,
 }
@@ -489,6 +497,8 @@ pub struct Line {
     pub from: String,
     pub to: String,
     pub length_km: f64,
+    /// Points de passage du tracé : `[longitude, latitude]` dans le fichier,
+    /// projetés au chargement.
     #[serde(default)]
     pub via: Vec<[f64; 2]>,
     pub max_trains: u32,
@@ -496,23 +506,6 @@ pub struct Line {
     /// Époque à partir de laquelle la ligne peut être construite.
     #[serde(default)]
     pub era: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DecorKind {
-    River,
-    /// Contour schématique d'un pays.
-    Border,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Decor {
-    pub kind: DecorKind,
-    #[serde(default)]
-    pub name: Option<String>,
-    pub path: Vec<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -523,6 +516,14 @@ pub struct Country {
     pub gauge_mm: u32,
     pub build_cost: f64,
     pub terrain: String,
+    /// Code du pays dans le fond de carte (ADM0_A3 de Natural Earth : GBR, FRA…),
+    /// pour colorer son territoire.
+    #[serde(default)]
+    pub iso: Option<String>,
+    /// Où écrire le nom du pays : `[longitude, latitude]`, projeté au chargement.
+    /// Par défaut, au-dessus de sa capitale.
+    #[serde(default)]
+    pub label: Option<[f64; 2]>,
     /// Époque à partir de laquelle la concession est proposée.
     #[serde(default)]
     pub era: Option<String>,
@@ -535,8 +536,6 @@ pub struct Country {
     pub stations: Vec<Station>,
     #[serde(default, rename = "line")]
     pub lines: Vec<Line>,
-    #[serde(default)]
-    pub decor: Vec<Decor>,
 }
 
 impl Country {
@@ -654,6 +653,8 @@ pub struct GameData {
     pub staff: Vec<Staff>,
     pub bonuses: Vec<PrestigeBonus>,
     pub crew: CrewRules,
+    /// Fond de carte : pays, côtes, frontières et fleuves.
+    pub atlas: Atlas,
 }
 
 fn parse<T: DeserializeOwned>(src: &str, file: &str) -> Result<T> {
@@ -678,6 +679,36 @@ fn load_list<T: DeserializeOwned>(
         }
     }
     Ok(items)
+}
+
+/// Projette sur la carte les coordonnées géographiques des pays : gares,
+/// points de passage des lignes et étiquettes.
+fn project_countries(countries: &mut [Country]) -> Result<()> {
+    let check = |what: String, p: [f64; 2]| -> Result<[f64; 2]> {
+        if atlas::valid_lonlat(p) {
+            Ok(project(p))
+        } else {
+            anyhow::bail!(
+                "countries.toml : {what} : [{}, {}] n'est pas une paire [longitude, latitude] valide",
+                p[0],
+                p[1]
+            )
+        }
+    };
+    for c in countries {
+        for s in &mut c.stations {
+            s.pos = check(format!("gare « {} »", s.id), s.pos)?;
+        }
+        for l in &mut c.lines {
+            for p in &mut l.via {
+                *p = check(format!("ligne « {} »", l.id), *p)?;
+            }
+        }
+        if let Some(p) = &mut c.label {
+            *p = check(format!("pays « {} »", c.id), *p)?;
+        }
+    }
+    Ok(())
 }
 
 impl GameData {
@@ -718,16 +749,27 @@ impl GameData {
             .try_into()
             .context("crew.toml : clé manquante, inconnue ou de mauvais type")?;
 
+        // Le fond de carte se remplace en entier.
+        let (world, world_file) = match overlay.map(|o| o.get("world.txt")) {
+            Some(text) if !text.is_empty() => (text, "mods/world.txt"),
+            _ => (base.get("world.txt"), "world.txt"),
+        };
+        let atlas = Atlas::parse(world, world_file)?;
+
+        let mut countries = load_list("countries.toml", base, overlay, |c: &Country| &c.id)?;
+        project_countries(&mut countries)?;
+
         let data = GameData {
             balance,
             crew,
+            atlas,
             eras: load_list("eras.toml", base, overlay, |e: &Era| &e.id)?,
             fuels: load_list("fuels.toml", base, overlay, |f: &Fuel| &f.id)?,
             traffic: load_list("traffic.toml", base, overlay, |c: &TrafficClass| &c.id)?,
             research: load_list("research.toml", base, overlay, |r: &Research| &r.id)?,
             locomotives: load_list("locomotives.toml", base, overlay, |l: &Locomotive| &l.id)?,
             upgrades: load_list("upgrades.toml", base, overlay, |u: &Upgrade| &u.id)?,
-            countries: load_list("countries.toml", base, overlay, |c: &Country| &c.id)?,
+            countries,
             events: load_list("events.toml", base, overlay, |e: &GameEvent| &e.id)?,
             staff: load_list("staff.toml", base, overlay, |s: &Staff| &s.id)?,
             bonuses: load_list("prestige.toml", base, overlay, |b: &PrestigeBonus| &b.id)?,
@@ -975,6 +1017,68 @@ mod tests {
                 .filter(|l| l.speculative)
                 .all(|l| l.era == "future")
         );
+    }
+
+    #[test]
+    fn stations_stand_on_their_real_country() {
+        let data = GameData::embedded().unwrap();
+        let at = |id: &str| data.station(id).unwrap().pos;
+        // Repère : x vers l'est, y vers le sud.
+        let (london, paris, madrid) = (at("london"), at("paris"), at("madrid"));
+        assert!(
+            paris[0] > london[0] && paris[1] > london[1],
+            "Paris au sud-est de Londres"
+        );
+        assert!(
+            madrid[0] < paris[0] && madrid[1] > paris[1],
+            "Madrid au sud-ouest de Paris"
+        );
+        assert!(
+            at("moscow")[0] > at("berlin")[0] + 100.0,
+            "Moscou loin à l'est"
+        );
+
+        for country in &data.countries {
+            let code = country
+                .iso
+                .as_deref()
+                .expect("chaque pays du jeu a son code");
+            let rings: Vec<&Vec<[f64; 2]>> = data
+                .atlas
+                .regions
+                .iter()
+                .filter(|r| r.code == code)
+                .map(|r| &r.ring)
+                .collect();
+            assert!(!rings.is_empty(), "{code} absent du fond de carte");
+            for station in &country.stations {
+                let [x, y] = station.pos;
+                // Dedans (pair-impair), ou à moins de 15 km de la côte (villes portuaires).
+                let mut inside = false;
+                let mut nearest = f64::MAX;
+                for ring in &rings {
+                    for pair in ring.windows(2) {
+                        let (a, b) = (pair[0], pair[1]);
+                        if (a[1] <= y) != (b[1] <= y)
+                            && x < a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+                        {
+                            inside = !inside;
+                        }
+                        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                        let t = (((x - a[0]) * dx + (y - a[1]) * dy)
+                            / (dx * dx + dy * dy).max(1e-12))
+                        .clamp(0.0, 1.0);
+                        nearest = nearest.min((a[0] + t * dx - x).hypot(a[1] + t * dy - y));
+                    }
+                }
+                assert!(
+                    inside || nearest < 1.5,
+                    "{} est hors de {code} ({:.0} km de la côte)",
+                    station.id,
+                    nearest * 10.0
+                );
+            }
+        }
     }
 
     #[test]

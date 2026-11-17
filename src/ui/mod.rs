@@ -10,7 +10,6 @@ mod map;
 mod popups;
 mod sl;
 mod theme;
-mod tree;
 
 use std::io::stdout;
 use std::path::Path;
@@ -324,13 +323,16 @@ mod tests {
             app.world.research_active.as_ref().map(|a| a.id.as_str()),
             Some("hand_signals")
         );
-        // Le lancement se voit aussitôt : dans l'arbre, dans la case, et dans le bandeau du haut.
+        // La fenêtre se referme, et le lancement se voit dans le bandeau du haut…
+        assert_eq!(app.popup, app::Popup::None);
+        // … comme dans la liste, rouverte sur la recherche en cours.
+        press(&mut app, KeyCode::Char('r'));
         let text = screen(&mut app, 120, 40);
-        assert!(
-            text.contains("En cours : Signaleurs de voie") && text.contains("encore 4 min"),
-            "{text}"
-        );
-        assert!(text.contains("Signaleurs de voie  0%]"), "{text}");
+        let row = text
+            .lines()
+            .find(|l| l.contains("Signaleurs de voie") && l.contains("Signalisation"))
+            .unwrap_or_default();
+        assert!(row.contains("en cours"), "{text}");
         press(&mut app, KeyCode::Esc);
         let top = screen(&mut app, 120, 40)
             .lines()
@@ -805,76 +807,50 @@ mod tests {
     }
 
     #[test]
-    fn research_tree_shows_who_needs_what() {
+    fn research_list_shows_who_needs_what() {
         let mut app = app(false, ColorMode::Color);
         press(&mut app, KeyCode::Char('r'));
-        // Par défaut, l'arbre est vertical : les époques descendent, les branches sont en colonnes.
-        assert!(app.tree_vertical);
+        assert_eq!(
+            app.popup,
+            app::Popup::Research {
+                sel: 0,
+                branch: None
+            }
+        );
         let text = screen(&mut app, 160, 44);
         for expected in [
-            "Pionniers",
-            "1825-1850",
+            "Bureau d'études : recherches",
+            "Toutes 0/52",
             "Signalisation",
-            "Confort",
             "Signaleurs de voie",
-            "▼",
+            "Télégraphe électrique",
         ] {
             assert!(
                 text.contains(expected),
                 "« {expected} » absent de :\n{text}"
             );
         }
+        // La liste suit les époques : les signaleurs avant le télégraphe.
         let line_of =
             |text: &str, needle: &str| text.lines().position(|l| l.contains(needle)).unwrap();
         assert!(line_of(&text, "Signaleurs de voie") < line_of(&text, "Télégraphe électrique"));
+
+        // La fiche du bas suit la sélection, avec ses prérequis.
         let telegraph = app
-            .data
-            .research
+            .research_items(None)
             .iter()
             .position(|r| r.id == "electric_telegraph")
             .unwrap();
-        press(&mut app, KeyCode::Down);
-        assert_eq!(app.popup, app::Popup::Tree { sel: telegraph });
-        press(&mut app, KeyCode::Up);
-        assert_eq!(app.popup, app::Popup::Tree { sel: 0 });
-
-        // Tab le fait pivoter : époques de gauche à droite.
-        press(&mut app, KeyCode::Tab);
-        assert!(!app.tree_vertical);
-        assert_eq!(app.popup, app::Popup::Tree { sel: 0 });
-        let text = screen(&mut app, 160, 44);
-        for expected in [
-            "Pionniers (1825-1850)",
-            "Âge d'or de la vapeur",
-            "Traction",
-            "Signalisation",
-            "Confort",
-            "Signaleurs de voie",
-            "Télégraphe électrique",
-            "Chaudière multitubula…",
-        ] {
-            assert!(
-                text.contains(expected),
-                "« {expected} » absent de :\n{text}"
-            );
+        for _ in 0..telegraph {
+            press(&mut app, KeyCode::Down);
         }
-        // Un trait relie les signaleurs au télégraphe, sur la même ligne, flèche à l'arrivée.
-        let row = text
-            .lines()
-            .find(|l| l.contains("Signaleurs de voie") && l.contains("Télégraphe"))
-            .unwrap();
-        let between = &row[row.find("Signaleurs").unwrap()..row.find("Télégraphe").unwrap()];
-        assert!(between.contains("─") && between.contains("▶"), "{row}");
-
-        // Les flèches suivent l'arbre ; la fiche du bas suit la sélection.
-        press(&mut app, KeyCode::Right);
-        let telegraph = app
-            .data
-            .research
-            .iter()
-            .position(|r| r.id == "electric_telegraph")
-            .unwrap();
-        assert_eq!(app.popup, app::Popup::Tree { sel: telegraph });
+        assert_eq!(
+            app.popup,
+            app::Popup::Research {
+                sel: telegraph,
+                branch: None
+            }
+        );
         let text = screen(&mut app, 160, 44);
         assert!(
             text.contains("Cooke et Wheatstone") && text.contains("Prérequis : Signaleurs de voie"),
@@ -885,47 +861,45 @@ mod tests {
             screen(&mut app, 160, 44).contains("Il faut d'abord rechercher : Signaleurs de voie")
         );
 
-        // On peut lancer une recherche depuis l'arbre, et tout parcourir sans erreur de rendu.
-        press(&mut app, KeyCode::Left);
+        // On lance une recherche ; la fenêtre rouverte se place dessus.
+        press(&mut app, KeyCode::Home);
         app.world.money = 600.0;
         press(&mut app, KeyCode::Enter);
         assert_eq!(
             app.world.research_active.as_ref().map(|a| a.id.as_str()),
             Some("hand_signals")
         );
-        for size in [(160, 44), (80, 24), (30, 8)] {
-            for key in [
-                KeyCode::Right,
-                KeyCode::Down,
-                KeyCode::Right,
-                KeyCode::Up,
-                KeyCode::Right,
-                KeyCode::Down,
-            ] {
-                for _ in 0..8 {
-                    press(&mut app, key);
-                    screen(&mut app, size.0, size.1);
-                }
-            }
-        }
-
-        // v bascule vers la liste, sur la même recherche, et retour.
-        let app::Popup::Tree { sel } = app.popup else {
-            panic!("{:?}", app.popup)
-        };
-        press(&mut app, KeyCode::Char('v'));
-        assert!(matches!(app.popup, app::Popup::Research { .. }));
-        press(&mut app, KeyCode::Char('v'));
-        assert_eq!(app.popup, app::Popup::Tree { sel });
         press(&mut app, KeyCode::Esc);
         assert_eq!(app.popup, app::Popup::None);
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Char('r'));
+        let active = app
+            .research_items(None)
+            .iter()
+            .position(|r| r.id == "hand_signals")
+            .unwrap();
+        assert_eq!(
+            app.popup,
+            app::Popup::Research {
+                sel: active,
+                branch: None
+            }
+        );
+        // Plus de vue en arbre : v ne change rien.
+        press(&mut app, KeyCode::Char('v'));
+        assert!(matches!(app.popup, app::Popup::Research { .. }));
+        for size in [(160, 44), (80, 24), (30, 8)] {
+            for _ in 0..app.data.research.len() {
+                press(&mut app, KeyCode::Down);
+                screen(&mut app, size.0, size.1);
+            }
+        }
     }
 
     #[test]
-    fn research_tree_filters_by_branch_and_scrolls() {
+    fn research_list_filters_by_branch_and_scrolls() {
         let mut app = app(false, ColorMode::Color);
         press(&mut app, KeyCode::Char('r'));
-        press(&mut app, KeyCode::Char('v'));
         let text = screen(&mut app, 120, 40);
         assert!(
             text.contains("Toutes 0/52") && text.contains("Signaleurs de voie"),
@@ -1369,6 +1343,52 @@ mod tests {
         press(&mut app, KeyCode::Tab);
         press(&mut app, KeyCode::Enter);
         println!("{}", screen(&mut app, 130, 36));
+    }
+
+    #[test]
+    fn the_map_draws_real_europe_in_ascii() {
+        for ascii in [false, true] {
+            let mut app = app(ascii, ColorMode::Color);
+            app.update(0.1);
+            screen(&mut app, 140, 44);
+            press(&mut app, KeyCode::Char('3'));
+            let text = screen(&mut app, 140, 44);
+            for name in ["ROYAUME-UNI", "FRANCE", "ALLEMAGNE", "ESPAGNE", "RUSSIE"] {
+                assert!(text.contains(name), "« {name} » absent de :\n{text}");
+            }
+            // Terres en damier, côtes en caractères ASCII, frontières en pointillés.
+            for glyph in [". . .", "-", "|", "/", "\\", ":"] {
+                assert!(text.contains(glyph), "« {glyph} » absent de :\n{text}");
+            }
+            // Le fond de carte n'utilise jamais le braille, réservé au réseau.
+            let braille = text
+                .chars()
+                .filter(|c| ('\u{2800}'..='\u{28ff}').contains(c))
+                .count();
+            assert!(braille < 40, "{braille} caractères braille :\n{text}");
+        }
+        // En vue pays, les fleuves et leur nom apparaissent.
+        let mut app = app(false, ColorMode::Color);
+        app.update(0.1);
+        screen(&mut app, 140, 44);
+        press(&mut app, KeyCode::Char('2'));
+        let text = screen(&mut app, 140, 44);
+        assert!(text.contains('~') && text.contains("Tamise"), "{text}");
+    }
+
+    /// Aperçu de la carte aux trois niveaux de zoom :
+    /// `cargo test map_preview -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn map_preview() {
+        let mut app = app(false, ColorMode::Color);
+        app.update(0.1);
+        app.popup_msg = None;
+        screen(&mut app, 140, 44);
+        for key in ['3', '2', '1'] {
+            press(&mut app, KeyCode::Char(key));
+            println!("{}\n", screen(&mut app, 140, 44));
+        }
     }
 
     #[test]

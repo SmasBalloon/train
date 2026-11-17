@@ -193,7 +193,10 @@ fn daemon(action: DaemonAction, notifications: bool) -> Result<()> {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let research = Popup::Tree { sel: 0 };
+    let research = Popup::Research {
+        sel: 0,
+        branch: None,
+    };
     match cli.command.unwrap_or(Command::Play) {
         // L'interface complète s'ouvre sur la carte ; le tableau est à une touche.
         Command::Play | Command::Map => interactive(&cli, Screen::Map, Popup::None),

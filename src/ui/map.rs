@@ -1,4 +1,4 @@
-//! Écran carte : réseau schématique plein écran, trains animés, bandeaux.
+//! Écran carte : l'Europe réelle en ASCII, le réseau par-dessus, trains animés, bandeaux.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -6,14 +6,16 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Widget};
 
-use crate::data::DecorKind;
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::sim::TrainState;
 
 use super::app::{App, LOG_TTL, LogKind};
 use super::canvas::{MapCanvas, Stroke};
 use super::format;
 
-const PRIO_GRID: u8 = 1;
+// Fond de carte : terres, frontières, puis côtes et fleuves ; le réseau par-dessus.
+const PRIO_LAND: u8 = 1;
 const PRIO_BORDER: u8 = 2;
 const PRIO_DECOR: u8 = 3;
 const PRIO_PROJECT: u8 = 4;
@@ -114,12 +116,12 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         return;
     }
     let mut canvas = MapCanvas::new(area.width, area.height, app.glyphs.ascii);
-    draw_grid(app, &mut canvas);
-    draw_decor(app, &mut canvas);
+    draw_land(app, &mut canvas);
+    draw_atlas_lines(app, &mut canvas);
     draw_tracks(app, &mut canvas);
     canvas.render(buf, area);
 
-    draw_decor_labels(app, buf, area);
+    draw_map_labels(app, buf, area);
     draw_stations(app, buf, area);
     draw_trains(app, buf, area);
 
@@ -129,24 +131,155 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
     draw_bottom_bar(app, buf, area);
 }
 
-fn draw_grid(app: &App, canvas: &mut MapCanvas) {
-    let cam = &app.camera;
+/// Terres et côtes, en ASCII.
+///
+/// 1. Chaque cellule est classée terre ou mer par balayage : pour chaque rangée,
+///    on cherche où les contours des pays la coupent, et on remplit entre les
+///    paires de coupures (règle pair-impair, pays par pays).
+/// 2. Une cellule de terre qui touche la mer devient un morceau de côte, dont le
+///    caractère (`-`, `|`, `/`, `\`) suit la direction de la mer ; les autres
+///    reçoivent un point, un sur deux (damier ancré à la carte) ; les pays de la
+///    compagnie sont remplis en entier, sauf en vue gare.
+fn draw_land(app: &App, canvas: &mut MapCanvas) {
+    let cam = app.camera;
     let size = canvas.px_size();
-    let spacing = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
-        .into_iter()
-        .find(|s| s * cam.scale >= 24.0)
-        .unwrap_or(200.0);
-    let top_left = cam.to_world((0.0, 0.0), size);
-    let bottom_right = cam.to_world(size, size);
-    let mut gy = (top_left[1] / spacing).floor() * spacing;
-    while gy <= bottom_right[1] {
-        let mut gx = (top_left[0] / spacing).floor() * spacing;
-        while gx <= bottom_right[0] {
-            let (x, y) = cam.to_px([gx, gy], size);
-            canvas.point(x, y, app.theme.grid, PRIO_GRID);
-            gx += spacing;
+    let (cols, rows) = ((size.0 / 2.0) as usize, (size.1 / 4.0) as usize);
+    if cols == 0 || rows == 0 {
+        return;
+    }
+    let west = cam.to_world((0.0, 0.0), size)[0];
+    let east = cam.to_world(size, size)[0];
+    let owned_codes: BTreeSet<&str> = app
+        .data
+        .countries
+        .iter()
+        .filter(|c| app.world.has_concession(&c.id))
+        .filter_map(|c| c.iso.as_deref())
+        .collect();
+
+    // 0 : mer, 1 : terre, 2 : terre de la compagnie.
+    let mut land = vec![0u8; cols * rows];
+    let mut crossings: BTreeMap<&str, Vec<f64>> = BTreeMap::new();
+    for cy in 0..rows {
+        let y = cam.to_world((0.0, cy as f64 * 4.0 + 2.0), size)[1];
+        crossings.values_mut().for_each(Vec::clear);
+        for region in &app.data.atlas.regions {
+            let [x0, y0, x1, y1] = region.bbox;
+            if y < y0 || y > y1 || x1 < west || x0 > east {
+                continue;
+            }
+            let xs = crossings.entry(&region.code).or_default();
+            for pair in region.ring.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                if (a[1] <= y) != (b[1] <= y) {
+                    xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]));
+                }
+            }
         }
-        gy += spacing;
+        for (code, xs) in &mut crossings {
+            xs.sort_by(f64::total_cmp);
+            let kind = if owned_codes.contains(code) { 2 } else { 1 };
+            for &[start, end] in xs.as_chunks::<2>().0 {
+                // Cellules dont le centre tombe entre les deux coupures.
+                let from = cam.to_px([start, y], size).0;
+                let to = cam.to_px([end, y], size).0;
+                let first = ((from - 1.0) / 2.0).ceil().max(0.0) as usize;
+                let last = ((to - 1.0) / 2.0).floor();
+                if last < 0.0 {
+                    continue;
+                }
+                for cx in first..=(last as usize).min(cols - 1) {
+                    let cell = &mut land[cy * cols + cx];
+                    *cell = (*cell).max(kind);
+                }
+            }
+        }
+    }
+
+    // Hors de l'écran, on suppose la terre : pas de fausse côte sur les bords.
+    let sea = |x: isize, y: isize| -> i32 {
+        if x < 0 || y < 0 || x >= cols as isize || y >= rows as isize {
+            0
+        } else {
+            (land[y as usize * cols + x as usize] == 0) as i32
+        }
+    };
+    // Vue gare : tout en damier, pour laisser respirer les étiquettes.
+    let close = cam.scale >= SCALE_STATION;
+    // Damier ancré à l'origine de la carte, pour qu'il ne glisse pas au déplacement.
+    let (ox, oy) = cam.to_px([0.0, 0.0], size);
+    let (ox, oy) = ((ox / 2.0).floor() as isize, (oy / 4.0).floor() as isize);
+    for cy in 0..rows {
+        for cx in 0..cols {
+            let kind = land[cy * cols + cx];
+            if kind == 0 {
+                continue;
+            }
+            let (x, y) = (cx as isize, cy as isize);
+            // Direction de la mer : somme des voisins marins (y vers le bas).
+            let gx = sea(x + 1, y) - sea(x - 1, y) + sea(x + 1, y - 1) + sea(x + 1, y + 1)
+                - sea(x - 1, y - 1)
+                - sea(x - 1, y + 1);
+            let gy = sea(x, y + 1) - sea(x, y - 1) + sea(x - 1, y + 1) + sea(x + 1, y + 1)
+                - sea(x - 1, y - 1)
+                - sea(x + 1, y - 1);
+            let shore = sea(x + 1, y) + sea(x - 1, y) + sea(x, y + 1) + sea(x, y - 1) > 0;
+            let style = if kind == 2 {
+                app.theme.land_owned
+            } else {
+                app.theme.land
+            };
+            if shore {
+                canvas.glyph(cx, cy, shore_char(gx, gy), app.theme.coast, PRIO_DECOR);
+            } else if (kind == 2 && !close) || (x - ox + y - oy).rem_euclid(2) == 0 {
+                canvas.glyph(cx, cy, '.', style, PRIO_LAND);
+            }
+        }
+    }
+}
+
+/// Caractère de côte : la côte est perpendiculaire à la direction de la mer.
+fn shore_char(gx: i32, gy: i32) -> char {
+    let (ax, ay) = (gx.abs(), gy.abs());
+    if ax == 0 && ay == 0 {
+        // Langue de terre ou îlot : mer de tous côtés.
+        'o'
+    } else if ay >= 2 * ax {
+        '-'
+    } else if ax >= 2 * ay {
+        '|'
+    } else if (gx > 0) == (gy < 0) {
+        // Mer au nord-est ou au sud-ouest.
+        '\\'
+    } else {
+        '/'
+    }
+}
+
+/// Frontières et fleuves, en caractères ASCII.
+fn draw_atlas_lines(app: &App, canvas: &mut MapCanvas) {
+    let cam = app.camera;
+    let size = canvas.px_size();
+    let atlas = &app.data.atlas;
+    let mut trace = |points: &[[f64; 2]], style: Style, prio: u8, stroke: Stroke| {
+        for pair in points.windows(2) {
+            canvas.text_line(
+                cam.to_px(pair[0], size),
+                cam.to_px(pair[1], size),
+                style,
+                prio,
+                stroke,
+            );
+        }
+    };
+    for border in &atlas.borders {
+        trace(border, app.theme.grid, PRIO_BORDER, Stroke::Fixed(':'));
+    }
+    // Les fleuves ne se voient qu'à partir de la vue pays.
+    if cam.scale >= app.country_scale() {
+        for river in &atlas.rivers {
+            trace(&river.path, app.theme.river, PRIO_DECOR, Stroke::Fixed('~'));
+        }
     }
 }
 
@@ -183,83 +316,67 @@ fn dashed(
     }
 }
 
-fn draw_decor(app: &App, canvas: &mut MapCanvas) {
-    let size = canvas.px_size();
-    let scale = app.camera.scale;
-    for country in &app.data.countries {
-        let owned = app.world.has_concession(&country.id);
-        for decor in &country.decor {
-            for pair in decor.path.windows(2) {
-                let (a, b) = (
-                    app.camera.to_px(pair[0], size),
-                    app.camera.to_px(pair[1], size),
-                );
-                match decor.kind {
-                    // Les rivières ne se voient que de près.
-                    DecorKind::River if scale >= SCALE_STATION => {
-                        canvas.line(a, b, app.theme.river, PRIO_DECOR, Stroke::Fixed('~'));
-                    }
-                    DecorKind::River => {}
-                    DecorKind::Border => {
-                        let style = if owned {
-                            app.theme.border_owned
-                        } else {
-                            app.theme.grid
-                        };
-                        canvas.line(a, b, style, PRIO_BORDER, Stroke::Fixed('.'));
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn draw_decor_labels(app: &App, buf: &mut Buffer, area: Rect) {
+/// Noms des pays (tant qu'on n'est pas au niveau des gares) et des fleuves.
+fn draw_map_labels(app: &App, buf: &mut Buffer, area: Rect) {
     let size = app.px_size();
     let scale = app.camera.scale;
-    for country in &app.data.countries {
-        let owned = app.world.has_concession(&country.id);
-        for decor in &country.decor {
-            match decor.kind {
-                DecorKind::River if scale >= SCALE_STATION * 2.0 => {
-                    let (Some(name), Some(anchor)) =
-                        (&decor.name, decor.path.get(1).or(decor.path.first()))
-                    else {
-                        continue;
-                    };
-                    let (cx, cy) = cell_of(app.camera.to_px(*anchor, size));
-                    put_centered(
-                        buf,
-                        area,
-                        area.x as i32 + cx,
-                        area.y as i32 + cy + 1,
-                        name,
-                        app.theme.river,
-                    );
+    let on_screen = |(x, y): (i32, i32)| {
+        // Ni sous le bandeau du haut, ni sous celui du bas.
+        x >= 0 && x < area.width as i32 && y >= 2 && y < area.height as i32 - 2
+    };
+    if scale < SCALE_STATION {
+        for country in &app.data.countries {
+            let anchor = match (country.label, country.capital()) {
+                (Some(label), _) => cell_of(app.camera.to_px(label, size)),
+                (None, Some(capital)) => {
+                    let (x, y) = cell_of(app.camera.to_px(capital.pos, size));
+                    (x, y - 2)
                 }
-                // Nom du pays, en haut de son contour, tant qu'on n'est pas au niveau des gares.
-                DecorKind::Border if scale < SCALE_STATION => {
-                    let n = decor.path.len().max(1) as f64;
-                    let cx = decor.path.iter().map(|p| p[0]).sum::<f64>() / n;
-                    let top = decor.path.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
-                    let (x, y) = cell_of(app.camera.to_px([cx, top], size));
-                    let style = if owned {
-                        app.theme.title
-                    } else {
-                        app.theme.dim
-                    };
-                    let name = country.name.fr.to_uppercase();
-                    put_centered(
-                        buf,
-                        area,
-                        area.x as i32 + x,
-                        area.y as i32 + y - 1,
-                        &name,
-                        style,
-                    );
-                }
-                _ => {}
+                (None, None) => continue,
+            };
+            if !on_screen(anchor) {
+                continue;
             }
+            let style = if app.world.has_concession(&country.id) {
+                app.theme.title
+            } else {
+                app.theme.dim
+            };
+            put_centered(
+                buf,
+                area,
+                area.x as i32 + anchor.0,
+                area.y as i32 + anchor.1,
+                &country.name.fr.to_uppercase(),
+                style,
+            );
+        }
+    }
+    if scale >= app.country_scale() {
+        // Chaque fleuve n'est nommé qu'une fois, au milieu de sa partie visible.
+        let mut named = BTreeSet::new();
+        for river in &app.data.atlas.rivers {
+            if named.contains(river.name.as_str()) {
+                continue;
+            }
+            let visible: Vec<(i32, i32)> = river
+                .path
+                .iter()
+                .map(|p| cell_of(app.camera.to_px(*p, size)))
+                .filter(|cell| on_screen(*cell))
+                .collect();
+            let Some(&(x, y)) = visible.get(visible.len() / 2) else {
+                continue;
+            };
+            named.insert(river.name.as_str());
+            put_centered(
+                buf,
+                area,
+                area.x as i32 + x,
+                area.y as i32 + y + 1,
+                &river.name,
+                app.theme.river,
+            );
         }
     }
 }
