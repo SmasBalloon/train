@@ -20,7 +20,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Clear, Widget};
 
 /// Durée de la traversée, en secondes réelles.
-pub const DURATION: f64 = 1.6;
+pub const DURATION: f64 = 0.4;
 
 /// Caisse de la D51, commune à toutes les images.
 const BODY: [&str; 7] = [
