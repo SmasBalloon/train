@@ -426,6 +426,31 @@ mod tests {
     }
 
     #[test]
+    fn shop_buys_several_locomotives_at_once() {
+        let mut app = app(false, ColorMode::Color);
+        app.update(0.1);
+        app.world.money = 10_000.0;
+        press(&mut app, KeyCode::Char('a'));
+        assert_eq!(app.popup, app::Popup::Shop { sel: 0, qty: 1 });
+        // Droite augmente la quantité, sans dépasser les places libres (3).
+        for _ in 0..5 {
+            press(&mut app, KeyCode::Right);
+        }
+        assert_eq!(app.popup, app::Popup::Shop { sel: 0, qty: 3 });
+        press(&mut app, KeyCode::Left);
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("Dépôt : 2 locomotives") && text.contains("Commande : 2 × £ 400 = £ 800"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.trains.len(), 3);
+        assert_eq!(app.world.money, 10_000.0 - 800.0);
+        assert_eq!(app.popup, app::Popup::None);
+        assert_eq!(app.selected, Some(2));
+    }
+
+    #[test]
     fn crew_popup_recruits_and_assigns() {
         let data = GameData::embedded().unwrap();
         let mut app = App::new(

@@ -38,9 +38,10 @@ pub struct LogEntry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Popup {
     None,
-    /// Dépôt : acheter une locomotive.
+    /// Dépôt : acheter une ou plusieurs locomotives (`qty`) du même modèle.
     Shop {
         sel: usize,
+        qty: u32,
     },
     /// Arbre de recherche, éventuellement filtré sur une branche.
     Research {
@@ -707,22 +708,25 @@ impl App {
         }
     }
 
-    fn buy(&mut self, index: usize) {
+    fn buy(&mut self, index: usize, qty: u32) {
         let Some(loco) = self.data.locomotives.get(index) else {
             return;
         };
         let (id, name) = (loco.id.clone(), loco.name.clone());
         let line = self.line_id().to_string();
-        match self.world.buy_locomotive(&self.data, &id, &line) {
-            Ok(train) => {
-                self.selected = Some(train);
+        match self.world.buy_locomotives(&self.data, &id, &line, qty) {
+            Ok(trains) => {
+                self.selected = trains.first().copied();
                 self.popup = Popup::None;
-                self.push_log(
-                    format!(
+                let text = match trains.len() {
+                    1 => format!(
                         "{name} : livrée à quai. Affecte-lui un conducteur (s) pour qu'elle roule"
                     ),
-                    LogKind::Warn,
-                );
+                    n => format!(
+                        "{n} × {name} livrées à quai. Affecte-leur un conducteur chacune (s) pour qu'elles roulent"
+                    ),
+                };
+                self.push_log(text, LogKind::Warn);
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -1249,13 +1253,23 @@ impl App {
                     }
                 }
             },
-            Popup::Shop { sel } => {
+            Popup::Shop { sel, qty } => {
+                // La quantité va de 1 aux places libres sur la ligne.
+                let room = self.world.line_room(&self.data, self.line_id()).max(1) as u32;
+                let step = match code {
+                    KeyCode::Left | KeyCode::Char('h' | '-') => Some(-1),
+                    KeyCode::Right | KeyCode::Char('l' | '+' | '=') => Some(1),
+                    _ => None,
+                };
                 if confirms {
-                    self.buy(sel);
+                    self.buy(sel, qty);
+                } else if let Some(step) = step {
+                    let qty = qty.saturating_add_signed(step).clamp(1, room);
+                    self.open(Popup::Shop { sel, qty });
                 } else if closes || code == KeyCode::Char('a') {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, self.data.locomotives.len()) {
-                    self.open(Popup::Shop { sel });
+                    self.open(Popup::Shop { sel, qty });
                 }
             }
             Popup::Tree { sel } => {
@@ -1550,7 +1564,7 @@ impl App {
             KeyCode::Char(' ') => self.dispatch_all(),
             KeyCode::Tab => self.select_next(1),
             KeyCode::BackTab => self.select_next(-1),
-            KeyCode::Char('a') => self.open(Popup::Shop { sel: 0 }),
+            KeyCode::Char('a') => self.open(Popup::Shop { sel: 0, qty: 1 }),
             KeyCode::Char('r') => self.open_tree(),
             KeyCode::Char('t') => self.open(Popup::Manage { sel: 0 }),
             KeyCode::Char('e') => self.open(Popup::Eras {

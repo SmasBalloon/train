@@ -64,7 +64,7 @@ s'affiche. Une seconde réelle vaut deux minutes de jeu.
 | `d`, Entrée               | donner le départ au train sélectionné                     |
 | Espace                    | donner le départ à tous les trains prêts                  |
 | Tab                       | sélectionner le train suivant                             |
-| `a`                       | dépôt : acheter une locomotive                            |
+| `a`                       | dépôt : acheter des locomotives (gauche/droite : quantité) |
 | `v`                       | flotte : revendre, remplacer une machine                  |
 | `s`                       | équipages : recruter, affecter au train sélectionné       |
 | `i`                       | formations : programmer une session, inscrire des équipiers |

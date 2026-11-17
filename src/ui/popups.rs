@@ -18,7 +18,7 @@ use super::format;
 pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
     match app.popup {
         Popup::None => {}
-        Popup::Shop { sel } => draw_shop(app, buf, area, sel),
+        Popup::Shop { sel, qty } => draw_shop(app, buf, area, sel, qty),
         Popup::Research { sel, branch } => draw_research(app, buf, area, sel, branch),
         Popup::Tree { sel } => super::tree::draw(app, buf, area, sel),
         Popup::Manage { sel } => draw_manage(app, buf, area, sel),
@@ -270,7 +270,7 @@ fn describe_event_effect(app: &App, effect: &EventEffect) -> String {
 
 // ───────────────────────────── Dépôt ─────────────────────────────
 
-fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
+fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize, qty: u32) {
     let t = &app.theme;
     let g = &app.glyphs;
     let locos = &app.data.locomotives;
@@ -282,7 +282,12 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         buf,
         area,
         &format!(
-            "Dépôt : une locomotive pour {}",
+            "Dépôt : {} pour {}",
+            if qty > 1 {
+                format!("{qty} locomotives")
+            } else {
+                "une locomotive".to_string()
+            },
             app.data.line(app.line_id()).map_or("", |l| l.name.as_str())
         ),
         locos.len(),
@@ -295,7 +300,10 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         .map(|(i, loco)| {
             let (status, style) = match app.world.purchase_blocker(&app.data, loco, line_id) {
                 Some(blocker) => (short_reason(&blocker), t.warn),
-                None if app.world.money < loco.cost => ("trop chère", t.dim),
+                None if qty as usize > app.world.line_room(&app.data, line_id) => {
+                    ("pas assez de place", t.warn)
+                }
+                None if app.world.money < loco.cost * qty as f64 => ("trop chère", t.dim),
                 None => ("disponible", t.good),
             };
             let text = format!(
@@ -381,6 +389,25 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         }
         if let Some(blocker) = app.world.purchase_blocker(&app.data, loco, line_id) {
             lines.push(Line::styled(format!("Indisponible : {blocker}"), t.warn));
+        } else {
+            let room = app.world.line_room(&app.data, line_id);
+            let total = loco.cost * qty as f64;
+            lines.push(Line::styled(
+                format!(
+                    "Commande : {qty} {} {} = {} {} {room} place{} libre{} sur la ligne",
+                    if g.ascii { "x" } else { "×" },
+                    format::money(loco.cost),
+                    format::money(total),
+                    g.bullet,
+                    if room > 1 { "s" } else { "" },
+                    if room > 1 { "s" } else { "" },
+                ),
+                if app.world.money < total {
+                    t.warn
+                } else {
+                    t.text
+                },
+            ));
         }
         lines.push(Line::raw(""));
         lines.push(Line::styled(loco.history.fr.clone(), t.text));
@@ -392,7 +419,7 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         app,
         buf,
         foot,
-        "Entrée : acheter    haut/bas : choisir    Échap : fermer",
+        "Entrée : acheter    gauche/droite : quantité    haut/bas : choisir    Échap : fermer",
     );
 }
 

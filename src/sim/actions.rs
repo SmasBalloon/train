@@ -254,6 +254,12 @@ impl World {
         None
     }
 
+    /// Places encore libres sur une ligne.
+    pub fn line_room(&self, data: &GameData, line_id: &str) -> usize {
+        self.line_capacity(data, line_id)
+            .saturating_sub(self.trains_on(line_id))
+    }
+
     /// Achète une locomotive et la met à quai au départ de la ligne.
     pub fn buy_locomotive(
         &mut self,
@@ -261,6 +267,20 @@ impl World {
         loco_id: &str,
         line_id: &str,
     ) -> Result<u32, ActionError> {
+        let ids = self.buy_locomotives(data, loco_id, line_id, 1)?;
+        Ok(ids[0])
+    }
+
+    /// Achète `count` locomotives d'un coup, tout ou rien : il faut la place
+    /// sur la ligne et l'argent pour toute la commande. Renvoie leurs numéros.
+    pub fn buy_locomotives(
+        &mut self,
+        data: &GameData,
+        loco_id: &str,
+        line_id: &str,
+        count: u32,
+    ) -> Result<Vec<u32>, ActionError> {
+        let count = count.max(1);
         let loco = data
             .locomotive(loco_id)
             .ok_or(ActionError::UnknownLocomotive)?;
@@ -271,8 +291,13 @@ impl World {
         if let Some(blocker) = self.purchase_blocker(data, loco, line_id) {
             return Err(blocker);
         }
-        self.pay(loco.cost)?;
-        Ok(self.spawn_train(loco_id, line_id))
+        if count as usize > self.line_room(data, line_id) {
+            return Err(ActionError::LineFull);
+        }
+        self.pay(loco.cost * count as f64)?;
+        Ok((0..count)
+            .map(|_| self.spawn_train(loco_id, line_id))
+            .collect())
     }
 
     /// Somme récupérée en revendant une machine.
@@ -1038,6 +1063,35 @@ mod tests {
             .upgrades
             .insert("catenary".into());
         assert!(world.buy_locomotive(&data, "tgv_sud_est", LINE).is_ok());
+    }
+
+    #[test]
+    fn several_locomotives_can_be_bought_at_once() {
+        let (mut world, data) = setup();
+        assert_eq!(world.line_room(&data, LINE), 3);
+        world.money = 1000.0;
+        assert_eq!(
+            world.buy_locomotives(&data, "locomotion_1", LINE, 3),
+            Err(ActionError::NotEnoughMoney { needed: 1200.0 })
+        );
+        assert_eq!(
+            world.buy_locomotives(&data, "locomotion_1", LINE, 4),
+            Err(ActionError::LineFull)
+        );
+        assert_eq!(world.trains.len(), 1, "tout ou rien");
+        assert_eq!(
+            world.buy_locomotives(&data, "locomotion_1", LINE, 2),
+            Ok(vec![2, 3])
+        );
+        assert_eq!(world.money, 200.0);
+        assert_eq!(world.line_room(&data, LINE), 1);
+        assert!(
+            world
+                .trains
+                .iter()
+                .skip(1)
+                .all(|t| t.is_docked() && !t.crew.has_driver)
+        );
     }
 
     #[test]
