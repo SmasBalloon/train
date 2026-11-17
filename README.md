@@ -55,7 +55,7 @@ Ajoute `--no-notify` pour couper les notifications (`notify-send` sous Linux,
 
 Le jeu avance aussi quand il est fermé : à la réouverture, l'absence est
 rattrapée (jusqu'à 8 h réelles, à 50 % d'efficacité par défaut) et un résumé
-s'affiche. Une seconde réelle vaut deux minutes de jeu.
+s'affiche. Une seconde réelle vaut une minute de jeu.
 
 ## Commandes
 

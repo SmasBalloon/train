@@ -218,9 +218,9 @@ mod tests {
         let data = GameData::embedded().unwrap();
         r.world.start_research(&data, "hand_signals").unwrap();
         let clock = r.world.clock;
-        // 4 heures de jeu de recherche : 120 secondes réelles à l'échelle 120.
-        let notices = r.tick(119.0);
-        assert!((r.world.clock - clock - 119.0 * 120.0).abs() < 1e-6);
+        // 4 heures de jeu de recherche : 240 secondes réelles à l'échelle 60.
+        let notices = r.tick(239.0);
+        assert!((r.world.clock - clock - 239.0 * 60.0).abs() < 1e-6);
         assert!(notices.is_empty(), "{notices:?}");
         let notices = r.tick(2.0);
         assert_eq!(notices.len(), 1);

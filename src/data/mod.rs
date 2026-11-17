@@ -1021,7 +1021,7 @@ mod tests {
 
         let data = with_mod("balance.toml", "start_money = 999.0").unwrap();
         assert_eq!(data.balance.start_money, 999.0);
-        assert_eq!(data.balance.time_scale, 120.0);
+        assert_eq!(data.balance.time_scale, 60.0);
     }
 
     #[test]

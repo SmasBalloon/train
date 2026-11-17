@@ -112,8 +112,8 @@ mod tests {
 
         assert_eq!(report.away_s, 3600.0);
         assert_eq!(report.simulated_s, 1800.0, "efficacité hors ligne de 50 %");
-        // 1800 s réelles à l'échelle 120.
-        assert!((world.clock - before.clock - 216_000.0).abs() < 1e-6);
+        // 1800 s réelles à l'échelle 60.
+        assert!((world.clock - before.clock - 108_000.0).abs() < 1e-6);
         assert!(report.trips > 20 && report.carried > 500, "{report:?}");
         assert!(report.net > 0.0 && report.revenue > report.net);
         assert!((world.money - before.money - report.net).abs() < 1e-9);

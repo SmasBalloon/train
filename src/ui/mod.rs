@@ -246,16 +246,16 @@ mod tests {
     fn dispatching_moves_the_train_and_earns_money() {
         let mut app = app(false, ColorMode::Colorblind);
         fill(&mut app, "stockton", 100.0);
-        // Dix minutes de jeu : le temps de remplir les 40 places.
-        for _ in 0..20 {
+        // Dix minutes de jeu (10 s réelles) : le temps de remplir les 40 places.
+        for _ in 0..40 {
             app.update(0.25);
         }
         assert_eq!(app.world.trains[0].count(), 40);
         press(&mut app, KeyCode::Char('d'));
         assert!(!app.world.trains[0].is_docked());
         let before = app.world.money;
-        // 19 km à 24 km/h : moins de 30 secondes réelles à l'échelle 120.
-        for _ in 0..120 {
+        // 19 km à 24 km/h : moins d'une minute réelle à l'échelle 60.
+        for _ in 0..240 {
             app.update(0.25);
         }
         assert!(app.world.trains[0].is_docked());
@@ -305,7 +305,7 @@ mod tests {
         // Le lancement se voit aussitôt : dans l'arbre, dans la case, et dans le bandeau du haut.
         let text = screen(&mut app, 120, 40);
         assert!(
-            text.contains("En cours : Signaleurs de voie") && text.contains("encore 2 min"),
+            text.contains("En cours : Signaleurs de voie") && text.contains("encore 4 min"),
             "{text}"
         );
         assert!(text.contains("Signaleurs de voie  0%]"), "{text}");
@@ -316,7 +316,7 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(
-            top.contains("Signaleurs de voie") && top.trim_end().ends_with("2 min"),
+            top.contains("Signaleurs de voie") && top.trim_end().ends_with("4 min"),
             "{top}"
         );
     }
@@ -1284,7 +1284,9 @@ mod tests {
         crate::sim::advance(&mut world, &data, 2400.0);
         let line = status_line(&world, &data, true);
         assert!(
-            line.starts_with("L 1 2") && line.contains("| 1 train en route | -L 0,1/s"),
+            line.starts_with("L 1 2")
+                && line.contains("| 1 train en route | ")
+                && line.ends_with("L 0,0/s"),
             "{line}"
         );
         assert!(line.is_ascii() && !line.contains('\n'));
