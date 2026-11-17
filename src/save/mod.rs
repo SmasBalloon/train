@@ -54,6 +54,41 @@ pub fn save(dir: &Path, world: &World) -> Result<()> {
     Ok(())
 }
 
+const SETTINGS_FILE: &str = "settings.json";
+
+fn yes() -> bool {
+    true
+}
+
+/// Préférences d'affichage, gardées d'une partie à l'autre (hors sauvegarde).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Settings {
+    /// Animation de la locomotive façon `sl` entre les écrans.
+    #[serde(default = "yes")]
+    pub transitions: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings { transitions: true }
+    }
+}
+
+/// Préférences enregistrées ; les valeurs par défaut si le fichier manque ou est illisible.
+pub fn load_settings(dir: &Path) -> Settings {
+    fs::read_to_string(dir.join(SETTINGS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_settings(dir: &Path, settings: &Settings) -> Result<()> {
+    fs::create_dir_all(dir).with_context(|| format!("création de {} impossible", dir.display()))?;
+    let path = dir.join(SETTINGS_FILE);
+    let json = serde_json::to_string_pretty(settings).context("sérialisation des préférences")?;
+    fs::write(&path, json).with_context(|| format!("écriture de {} impossible", path.display()))
+}
+
 /// Partie relue sur le disque, avec l'heure de son écriture (secondes Unix).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loaded {

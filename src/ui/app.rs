@@ -14,6 +14,7 @@ use super::board::{self, Board};
 use super::camera::{Camera, Polyline};
 use super::format;
 use super::glyphs::Glyphs;
+use super::sl;
 use super::theme::{ColorMode, Theme};
 use super::{map, popups, tree};
 
@@ -142,6 +143,8 @@ pub enum Screen {
 pub struct UiOptions {
     pub ascii: bool,
     pub color: ColorMode,
+    /// Animation de la locomotive façon `sl` entre les écrans.
+    pub transitions: bool,
 }
 
 pub struct App {
@@ -176,6 +179,12 @@ pub struct App {
     line: String,
     /// Orientation de l'arbre de recherche : époques de haut en bas, ou de gauche à droite.
     pub tree_vertical: bool,
+    /// Animations de transition activées (touche S).
+    pub transitions: bool,
+    /// Début (horloge de l'interface) de la transition en cours.
+    pub transition: Option<f64>,
+    /// Vrai quand les préférences ont changé et doivent être enregistrées.
+    pub settings_dirty: bool,
 }
 
 impl App {
@@ -219,6 +228,9 @@ impl App {
             paths,
             line,
             tree_vertical: true,
+            transitions: opts.transitions,
+            transition: None,
+            settings_dirty: false,
         }
     }
 
@@ -1248,13 +1260,40 @@ impl App {
     // ----- Entrées -----
 
     pub fn on_event(&mut self, event: Event) {
+        let (was_map, screen) = (self.popup == Popup::None, self.screen);
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key(key),
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                // Une touche interrompt la locomotive, puis agit normalement.
+                self.transition = None;
+                self.on_key(key);
+            }
+            Event::Mouse(_) if self.transition.is_some() => {}
             Event::Mouse(mouse) if self.popup == Popup::None && self.screen == Screen::Map => {
                 self.on_mouse(mouse)
             }
             _ => {}
         }
+        // La locomotive passe quand on ouvre une fenêtre depuis la carte ou qu'on change d'écran.
+        let opened = was_map && self.popup != Popup::None;
+        if self.transitions && (opened || self.screen != screen) {
+            self.transition = Some(self.time);
+        }
+    }
+
+    /// Active ou coupe les animations de transition ; la préférence est enregistrée.
+    fn toggle_transitions(&mut self) {
+        self.transitions = !self.transitions;
+        self.transition = None;
+        self.settings_dirty = true;
+        let state = if self.transitions {
+            "activées"
+        } else {
+            "désactivées"
+        };
+        self.push_log(
+            format!("Animations de transition {state} (S)"),
+            LogKind::Info,
+        );
     }
 
     fn on_key(&mut self, key: KeyEvent) {
@@ -1566,6 +1605,7 @@ impl App {
                 self.board_index = (self.board_index % count + count - 1) % count;
             }
             KeyCode::Char('p') if !self.read_only => self.paused = !self.paused,
+            KeyCode::Char('S') => self.toggle_transitions(),
             KeyCode::Char('?') => self.open(Popup::Help),
             _ => {}
         }
@@ -1624,6 +1664,7 @@ impl App {
                 self.open(Popup::Crew { sel: 0, recruiting });
             }
             KeyCode::Char('i') => self.open(Popup::Training { sel: 0 }),
+            KeyCode::Char('S') => self.toggle_transitions(),
             KeyCode::Char('v') => {
                 let sel = self
                     .selected
@@ -1695,6 +1736,20 @@ impl App {
             Screen::Board => board::draw(self, frame.buffer_mut(), area),
         }
         popups::draw(self, frame.buffer_mut(), area);
+        if let Some(start) = self.transition {
+            let elapsed = self.time - start;
+            if sl::finished(area.width, elapsed) {
+                self.transition = None;
+            } else {
+                sl::draw(
+                    frame.buffer_mut(),
+                    area,
+                    elapsed,
+                    self.theme.text,
+                    self.theme.smoke,
+                );
+            }
+        }
         if self.glyphs.ascii {
             map::fold_to_ascii(frame.buffer_mut(), area);
         }

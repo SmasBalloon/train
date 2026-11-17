@@ -29,6 +29,9 @@ struct Cli {
     #[arg(long, global = true)]
     colorblind: bool,
 
+    /// Coupe l'animation de la locomotive entre les écrans (pour cette fois)
+    #[arg(long, global = true)]
+    no_anim: bool,
     /// Recommence une partie (l'ancienne sauvegarde est gardée en save.json.bak)
     #[arg(long, global = true)]
     new: bool,
@@ -119,10 +122,11 @@ fn interactive(cli: &Cli, screen: Screen, popup: Popup) -> Result<()> {
         report,
         popup,
     };
-    ui::run(world, data, session, ui_options(cli))
+    let transitions = save::load_settings(&dir).transitions && !cli.no_anim;
+    ui::run(world, data, session, ui_options(cli, transitions))
 }
 
-fn ui_options(cli: &Cli) -> UiOptions {
+fn ui_options(cli: &Cli, transitions: bool) -> UiOptions {
     let color = if cli.no_color || std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
         ColorMode::NoColor
     } else if cli.colorblind {
@@ -133,6 +137,7 @@ fn ui_options(cli: &Cli) -> UiOptions {
     UiOptions {
         ascii: cli.ascii || !locale_is_utf8(),
         color,
+        transitions,
     }
 }
 

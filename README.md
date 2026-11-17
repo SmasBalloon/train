@@ -36,7 +36,15 @@ rail --new        # recommence une partie (l'ancienne est gardée en save.json.b
 
 Options d'affichage : `--ascii` (sans caractères Unicode), `--no-color`
 (la variable `NO_COLOR` est aussi respectée), `--colorblind` (palette adaptée
-au daltonisme).
+au daltonisme), `--no-anim` (pas d'animation de transition, pour cette fois).
+
+### Animation de transition
+
+Quand tu ouvres une fenêtre depuis la carte ou que tu changes d'écran, la
+locomotive D51 de [`sl`](https://github.com/mtoyoda/sl) traverse le terminal en
+crachant sa fumée. N'importe quelle touche l'interrompt (et agit normalement).
+`S` (majuscule) l'active ou la coupe ; le choix est retenu dans
+`settings.json`, à côté de la sauvegarde.
 
 ### Jouer en arrière-plan
 
@@ -84,6 +92,7 @@ s'affiche. Une seconde réelle vaut une minute de jeu.
 | `0`                       | recadrer la ligne courante                                |
 | `1` / `2` / `3`           | vue gare, pays, continent                                 |
 | `p`                       | pause                                                     |
+| `S`                       | activer ou couper l'animation de la locomotive            |
 | `?`                       | aide                                                      |
 | `q`, Échap                | quitter (la partie est sauvegardée)                       |
 
@@ -175,3 +184,8 @@ terminal, ni au disque, ni à l'horloge. L'interface (`src/ui/`) repose sur
 ## Licence
 
 MIT.
+
+L'animation de transition reprend les dessins et le mouvement de la fumée de
+`sl` : Copyright 1993,1998,2014 Toyoda Masashi (mtoyoda@acm.org). « Everyone
+is permitted to do anything on this program including copying, modifying, and
+improving, unless you try to pretend that you wrote it. »

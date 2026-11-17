@@ -8,6 +8,7 @@ mod format;
 mod glyphs;
 mod map;
 mod popups;
+mod sl;
 mod theme;
 mod tree;
 
@@ -126,6 +127,19 @@ pub fn run(world: World, data: GameData, session: Session, opts: UiOptions) -> R
         app.update(now.duration_since(last).as_secs_f64().min(MAX_FRAME_DT));
         last = now;
 
+        if app.settings_dirty {
+            app.settings_dirty = false;
+            let settings = save::Settings {
+                transitions: app.transitions,
+            };
+            if let Err(e) = save::save_settings(save_dir, &settings) {
+                app.push_log(
+                    format!("Préférences non enregistrées : {e:#}"),
+                    app::LogKind::Warn,
+                );
+            }
+        }
+
         if session.writable {
             if last_save.elapsed() >= AUTOSAVE {
                 last_save = Instant::now();
@@ -173,7 +187,15 @@ mod tests {
         let data = GameData::embedded().unwrap();
         let mut world = World::new(&data);
         world.test_driver(1);
-        App::new(world, data, UiOptions { ascii, color })
+        App::new(
+            world,
+            data,
+            UiOptions {
+                ascii,
+                color,
+                transitions: false,
+            },
+        )
     }
 
     fn screen(app: &mut App, width: u16, height: u16) -> String {
@@ -426,6 +448,45 @@ mod tests {
     }
 
     #[test]
+    fn the_sl_locomotive_crosses_between_screens_and_can_be_turned_off() {
+        let mut app = app(false, ColorMode::Color);
+        app.transitions = true;
+        app.update(0.1);
+        // Ouvrir une fenêtre depuis la carte fait passer la locomotive.
+        press(&mut app, KeyCode::Char('a'));
+        let start = app.transition.expect("transition lancée");
+        app.update(super::sl::DURATION * 0.45);
+        let text = screen(&mut app, 120, 40);
+        assert!(
+            text.contains("_D _|  |_______/") && !text.contains("Dépôt"),
+            "{text}"
+        );
+        // Elle finit seule, et la fenêtre apparaît.
+        app.update(super::sl::DURATION);
+        let text = screen(&mut app, 120, 40);
+        assert!(app.transition.is_none() && text.contains("Dépôt"), "{text}");
+        assert!(app.time > start);
+        // Naviguer dans une fenêtre ne la relance pas ; changer d'écran, si.
+        press(&mut app, KeyCode::Down);
+        assert!(app.transition.is_none());
+        press(&mut app, KeyCode::Esc);
+        assert!(app.transition.is_none(), "fermer ne la relance pas");
+        press(&mut app, KeyCode::Char('b'));
+        assert!(app.transition.is_some());
+        // Une touche l'interrompt et agit normalement.
+        press(&mut app, KeyCode::Char('b'));
+        assert_eq!(app.screen, Screen::Map);
+        app.transition = None;
+
+        // S la coupe, et demande d'enregistrer la préférence.
+        press(&mut app, KeyCode::Char('S'));
+        assert!(!app.transitions && app.settings_dirty);
+        press(&mut app, KeyCode::Char('a'));
+        assert!(app.transition.is_none());
+        assert!(screen(&mut app, 120, 40).contains("Dépôt"));
+    }
+
+    #[test]
     fn shop_buys_several_locomotives_at_once() {
         let mut app = app(false, ColorMode::Color);
         app.update(0.1);
@@ -459,6 +520,7 @@ mod tests {
             UiOptions {
                 ascii: false,
                 color: ColorMode::Color,
+                transitions: false,
             },
         );
         app.update(0.1);

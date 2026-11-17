@@ -2364,6 +2364,7 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("0", "recadrer la ligne courante"),
         ("1 / 2 / 3", "vue gare, vue pays, vue continent"),
         ("p", "pause"),
+        ("S", "activer ou couper l'animation de la locomotive"),
         ("q, Échap", "quitter (la partie est sauvegardée)"),
     ];
     let mut lines: Vec<Line> = keys
