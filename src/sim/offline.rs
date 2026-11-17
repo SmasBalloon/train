@@ -73,7 +73,9 @@ pub fn catch_up(world: &mut World, data: &GameData, away_s: f64) -> OfflineRepor
                 SimEvent::EventReady { .. }
                 | SimEvent::Departed { .. }
                 | SimEvent::Repaired { .. }
-                | SimEvent::FuelBought { .. } => {}
+                | SimEvent::FuelBought { .. }
+                | SimEvent::TrainSold { .. }
+                | SimEvent::TrainReplaced { .. } => {}
             }
         }
         remaining -= chunk;
@@ -93,6 +95,8 @@ mod tests {
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
+        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        data.crew.base_wage = 0.0;
         (World::new(&data), data)
     }
 

@@ -61,6 +61,9 @@ impl CrewMember {
 pub struct TrainCrew {
     pub driver: [f64; 3],
     pub conductor: [f64; 3],
+    /// Vrai quand un conducteur est affecté : sans lui, le train ne part pas.
+    #[serde(default)]
+    pub has_driver: bool,
 }
 
 impl TrainCrew {
@@ -165,10 +168,79 @@ impl World {
                 continue;
             };
             match member.role {
-                CrewRole::Driver => train.crew.driver = member.skills,
+                CrewRole::Driver => {
+                    train.crew.driver = member.skills;
+                    train.crew.has_driver = true;
+                }
                 CrewRole::Conductor => train.crew.conductor = member.skills,
             }
         }
+    }
+
+    /// Engage d'office un conducteur débutant pour un train qui n'en a pas
+    /// (machine de départ, sauvegardes d'avant le conducteur obligatoire).
+    pub(crate) fn novice_driver(&mut self, data: &GameData, train: u32) -> u32 {
+        let mut seed = (train as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xD1B5;
+        let first = pick(&data.crew.names.first, &mut seed).to_string();
+        let last = pick(&data.crew.names.last, &mut seed);
+        self.next_crew_id += 1;
+        self.crew.push(CrewMember {
+            id: self.next_crew_id,
+            name: format!("{first} {last}"),
+            role: CrewRole::Driver,
+            skills: [0.0; 3],
+            km: 0.0,
+            train: Some(train),
+        });
+        self.sync_crew();
+        self.next_crew_id
+    }
+
+    /// Premier équipier de ce métier en réserve, s'il y en a un.
+    pub fn reserve(&self, role: CrewRole) -> Option<&CrewMember> {
+        self.crew
+            .iter()
+            .filter(|m| m.role == role && m.train.is_none())
+            .max_by(|a, b| a.average().total_cmp(&b.average()))
+    }
+
+    /// Prix d'une formation dans une compétence, ou `None` si elle est déjà parfaite.
+    pub fn training_cost(&self, data: &GameData, member: &CrewMember, skill: usize) -> Option<f64> {
+        let level = *member.skills.get(skill)?;
+        if level >= 1.0 - 1e-9 {
+            return None;
+        }
+        let rules = &data.crew;
+        Some(
+            rules.training_cost
+                * (1.0 + rules.training_cost_growth * level * level)
+                * self.wage_scale(data),
+        )
+    }
+
+    /// Paie une formation à un équipier ; renvoie son prix.
+    pub fn train_crew_skill(
+        &mut self,
+        data: &GameData,
+        crew_id: u32,
+        skill: usize,
+    ) -> Result<f64, ActionError> {
+        let member = self.crew_member(crew_id).ok_or(ActionError::UnknownCrew)?;
+        if skill >= 3 {
+            return Err(ActionError::UnknownCrew);
+        }
+        let cost = self
+            .training_cost(data, member, skill)
+            .ok_or(ActionError::MaxLevel)?;
+        if self.money < cost {
+            return Err(ActionError::NotEnoughMoney { needed: cost });
+        }
+        self.money -= cost;
+        if let Some(member) = self.crew.iter_mut().find(|m| m.id == crew_id) {
+            member.skills[skill] = (member.skills[skill] + data.crew.training_gain).min(1.0);
+        }
+        self.sync_crew();
+        Ok(cost)
     }
 
     pub fn crew_member(&self, id: u32) -> Option<&CrewMember> {
@@ -327,7 +399,11 @@ mod tests {
         let name = world.candidates[best].name.clone();
         let id = world.hire_crew(&data, best).unwrap();
         assert!((world.money - (10_000.0 - fees[best])).abs() < 1e-9);
-        assert_eq!((world.candidates.len(), world.crew.len()), (3, 1));
+        assert_eq!(
+            (world.candidates.len(), world.crew.len()),
+            (3, 2),
+            "fondateur + recrue"
+        );
         assert_eq!(world.crew_member(id).unwrap().name, name);
         assert_eq!(world.hire_crew(&data, 9), Err(ActionError::UnknownCrew));
     }
@@ -344,7 +420,8 @@ mod tests {
             world.trains[0].crew,
             TrainCrew {
                 driver: [0.5; 3],
-                conductor: [0.4; 3]
+                conductor: [0.4; 3],
+                has_driver: true,
             }
         );
         // Un second conducteur sur le même train renvoie le premier en réserve.
@@ -448,6 +525,7 @@ mod tests {
     #[test]
     fn wages_are_paid_every_hour_and_follow_the_era() {
         let (mut world, data) = setup();
+        world.crew.clear();
         let id = member(&mut world, CrewRole::Driver, [0.5; 3]);
         // 3 de base + 9 × 0,5 de compétence.
         assert_eq!(world.wage_of(&data, world.crew_member(id).unwrap()), 7.5);
@@ -487,5 +565,54 @@ mod tests {
             [0.2; 3],
             "la réserve n'apprend rien"
         );
+    }
+
+    #[test]
+    fn training_raises_a_skill_and_gets_dearer_as_it_improves() {
+        let (mut world, data) = setup();
+        let id = member(&mut world, CrewRole::Driver, [0.0, 0.5, 0.95]);
+        let m = world.crew_member(id).unwrap().clone();
+        let (novice, half) = (
+            world.training_cost(&data, &m, 0).unwrap(),
+            world.training_cost(&data, &m, 1).unwrap(),
+        );
+        assert_eq!(novice, 60.0);
+        assert_eq!(half, 60.0 * (1.0 + 6.0 * 0.25));
+        assert!(matches!(
+            world.train_crew_skill(&data, id, 1),
+            Err(ActionError::NotEnoughMoney { .. })
+        ));
+        world.money = 1000.0;
+        assert_eq!(world.train_crew_skill(&data, id, 1), Ok(half));
+        assert_eq!(world.money, 1000.0 - half);
+        assert!((world.crew_member(id).unwrap().skills[1] - 0.6).abs() < 1e-9);
+        // Plafonnée à la perfection, puis plus rien à apprendre.
+        world.train_crew_skill(&data, id, 2).unwrap();
+        assert_eq!(world.crew_member(id).unwrap().skills[2], 1.0);
+        assert_eq!(
+            world.train_crew_skill(&data, id, 2),
+            Err(ActionError::MaxLevel)
+        );
+        assert_eq!(
+            world.train_crew_skill(&data, 99, 0),
+            Err(ActionError::UnknownCrew)
+        );
+        // Un conducteur formé coûte plus cher à l'heure.
+        assert!(world.wage_of(&data, world.crew_member(id).unwrap()) > world.wage_of(&data, &m));
+    }
+
+    #[test]
+    fn old_saves_give_each_train_a_novice_driver() {
+        let (mut world, data) = setup();
+        world.crew.clear();
+        world.version = 6;
+        world.reconcile(&data);
+        assert!(world.trains[0].crew.has_driver);
+        let driver = world.crew_on(1, CrewRole::Driver).unwrap();
+        assert_eq!(driver.skills, [0.0; 3]);
+        // Une sauvegarde récente n'est pas touchée : le train attend un conducteur.
+        world.crew.clear();
+        world.reconcile(&data);
+        assert!(!world.trains[0].crew.has_driver);
     }
 }

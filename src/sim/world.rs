@@ -8,7 +8,7 @@ use super::crew::{CrewMember, TrainCrew};
 use super::kinematics::Profile;
 use super::modifiers::Modifiers;
 
-pub const SAVE_VERSION: u32 = 6;
+pub const SAVE_VERSION: u32 = 7;
 
 /// Constante de temps (secondes de jeu) de la moyenne glissante des revenus.
 pub(crate) const INCOME_TAU: f64 = 2.0 * 3600.0;
@@ -69,6 +69,15 @@ pub struct Trip {
     pub profile: Profile,
 }
 
+/// Ordre exécuté dès que le train est à quai.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TrainOrder {
+    /// Revendre la machine à son arrivée.
+    Sell,
+    /// Remplacer la machine par `loco` ; `paid` a déjà été débité à la commande.
+    Replace { loco: String, paid: f64 },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Train {
     pub id: u32,
@@ -102,6 +111,9 @@ pub struct Train {
     /// Note d'affluence (0 à 1) relevée au départ ; 1 = à l'aise.
     #[serde(default = "one")]
     pub crowding: f64,
+    /// Vente ou remplacement prévu à la prochaine arrivée.
+    #[serde(default)]
+    pub order: Option<TrainOrder>,
 }
 
 impl Train {
@@ -303,7 +315,9 @@ impl World {
             next_crew_id: 0,
         };
         world.reconcile(data);
-        world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
+        let train = world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
+        // La machine de départ est livrée avec son mécanicien, débutant.
+        world.novice_driver(data, train);
         world
     }
 
@@ -314,6 +328,7 @@ impl World {
         let b = &data.balance;
         let known = |id: &String| data.class(id).is_some();
         let first_class = data.traffic.first().map(|c| c.id.clone());
+        let loaded_version = self.version;
         self.version = SAVE_VERSION;
 
         for s in data.stations() {
@@ -465,6 +480,29 @@ impl World {
             *s = s.clamp(0.0, 1.0);
         }
         self.sync_crew();
+        // Avant la version 7, un train roulait sans conducteur : chacun en reçoit un.
+        if loaded_version < 7 {
+            let driverless: Vec<u32> = self
+                .trains
+                .iter()
+                .filter(|t| !t.crew.has_driver)
+                .map(|t| t.id)
+                .collect();
+            for train in driverless {
+                self.novice_driver(data, train);
+            }
+        }
+        // Un remplacement vers une machine disparue des données est annulé et remboursé.
+        let mut refund = 0.0;
+        for train in &mut self.trains {
+            if let Some(TrainOrder::Replace { loco, paid }) = &train.order
+                && data.locomotive(loco).is_none()
+            {
+                refund += paid;
+                train.order = None;
+            }
+        }
+        self.money += refund;
     }
 
     /// Arrêt prévu en gare sur une ligne, en secondes de jeu.
@@ -490,6 +528,7 @@ impl World {
             trip: None,
             crew: TrainCrew::default(),
             crowding: 1.0,
+            order: None,
         });
         id
     }

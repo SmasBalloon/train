@@ -945,7 +945,7 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
                 "Équipage : {} {} {}",
                 app.world
                     .crew_on(train.id, crate::sim::CrewRole::Driver)
-                    .map_or("conducteur ordinaire", |c| c.name.as_str()),
+                    .map_or("SANS CONDUCTEUR", |c| c.name.as_str()),
                 g.bullet,
                 app.world
                     .crew_on(train.id, crate::sim::CrewRole::Conductor)

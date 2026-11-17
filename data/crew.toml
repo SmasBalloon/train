@@ -1,6 +1,7 @@
 # Équipages : conducteurs et contrôleurs affectés aux trains.
 #
-# Un train sans équipage désigné roule avec du personnel ordinaire, sans bonus.
+# Un train ne part pas sans conducteur ; sans contrôleur désigné, il roule avec
+# du personnel ordinaire, sans bonus.
 # Chaque compétence va de 0 à 1 (affichée sur cinq étoiles) et progresse avec
 # les kilomètres parcourus.
 
@@ -9,6 +10,12 @@ base_wage          = 3.0    # salaire horaire d'un débutant, première époque
 skill_wage         = 9.0    # supplément horaire pour un équipier parfait
 hire_fee_hours     = 24.0   # prime d'embauche, en heures de salaire
 xp_per_km          = 0.00002  # part du chemin vers la perfection gagnée par km parcouru
+
+# Formations payantes : chacune fait gagner `training_gain` dans une compétence.
+# Prix (première époque) : training_cost × (1 + training_cost_growth × niveau²).
+training_gain        = 0.10
+training_cost        = 60.0
+training_cost_growth = 6.0
 
 # Effet d'une compétence au maximum (un équipier à moitié compétent en donne la moitié).
 [effects]

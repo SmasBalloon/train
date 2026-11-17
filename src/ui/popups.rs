@@ -8,7 +8,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Padding, Paragraph, Widget, Wrap};
 
 use crate::data::{BonusKind, Branch, Effect, EventEffect, Research, StaffRole, UpgradeEffect};
-use crate::sim::{ActionError, LineProps, TrainState, allowed_speed, demand_per_hour};
+use crate::sim::{
+    ActionError, CrewRole, LineProps, TrainOrder, TrainState, allowed_speed, demand_per_hour,
+};
 
 use super::app::{App, NetworkRow, Popup};
 use super::format;
@@ -28,6 +30,7 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::Company { sel, .. } => draw_company(app, buf, area, sel),
         Popup::Crew { sel, recruiting } => draw_crew(app, buf, area, sel, recruiting),
         Popup::Fleet { sel } => draw_fleet(app, buf, area, sel),
+        Popup::Replace { train, sel, .. } => draw_replace(app, buf, area, train, sel),
         Popup::Event { sel } => draw_event(app, buf, area, sel),
         Popup::Outcome { event, choice } => draw_outcome(app, buf, area, event, choice),
         Popup::Welcome => draw_welcome(app, buf, area),
@@ -142,6 +145,7 @@ fn short_reason(error: &ActionError) -> &'static str {
         ActionError::WrongEra(_) => "époque ultérieure",
         ActionError::NeedsUpgrade(_) => "voie à équiper",
         ActionError::LineFull => "ligne complète",
+        ActionError::SameLocomotive => "machine actuelle",
         ActionError::AlreadyResearched => "terminée",
         ActionError::AlreadyInstalled => "installée",
         ActionError::NoConcession(_) => "concession requise",
@@ -1411,7 +1415,7 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         let text = if recruiting {
             "Plus de candidats aujourd'hui : de nouveaux se présenteront demain."
         } else {
-            "Aucun équipier pour l'instant : Tab ouvre le recrutement. Sans équipage désigné, un train roule avec du personnel ordinaire, sans bonus."
+            "Aucun équipier pour l'instant : Tab ouvre le recrutement. Un train ne part pas sans conducteur ; sans contrôleur, il roule avec du personnel ordinaire."
         };
         Paragraph::new(Line::styled(text, t.dim))
             .wrap(Wrap { trim: true })
@@ -1461,9 +1465,28 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
                 ),
             ]));
         }
+        if !recruiting {
+            let costs: Vec<String> = (0..3)
+                .map(|i| {
+                    let name = m.role.skills()[i].to_lowercase();
+                    match app.world.training_cost(&app.data, m, i) {
+                        Some(cost) => format!("{} {name} {}", i + 1, format::money(cost)),
+                        None => format!("{} {name} parfait", i + 1),
+                    }
+                })
+                .collect();
+            lines.push(Line::styled(
+                format!(
+                    "Formations (+{} chacune) : {}",
+                    format::percent(rules.training_gain),
+                    costs.join(&format!(" {} ", g.bullet))
+                ),
+                t.text,
+            ));
+        }
         lines.push(Line::raw(""));
         lines.push(Line::styled(
-            "Les compétences progressent avec les kilomètres parcourus en service ; un équipier en réserve est payé mais n'apprend rien.",
+            "Les compétences progressent avec les kilomètres parcourus en service, ou d'un coup avec une formation payante ; un équipier en réserve est payé mais n'apprend rien. Un train ne part jamais sans conducteur.",
             t.dim,
         ));
         if !recruiting {
@@ -1489,7 +1512,7 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         if recruiting {
             "Entrée : embaucher    Tab : employés    haut/bas : choisir    Échap : fermer"
         } else {
-            "Entrée : affecter au train sélectionné (ou réserve)    x : licencier    Tab : recrutement    Échap : fermer"
+            "Entrée : affecter au train sélectionné (ou réserve)    1/2/3 : formation    x : licencier    Tab : recrutement    Échap : fermer"
         },
     );
 }
@@ -1503,7 +1526,7 @@ fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
     let m = app.world.modifiers(&app.data);
     let line_id = app.line_id();
     let title = format!("Flotte : {} trains sur le réseau", trains.len());
-    let [list, detail, foot] = panel(app, buf, area, &title, trains.len().max(1), (100, 24));
+    let [list, detail, foot] = panel(app, buf, area, &title, trains.len().max(1), (116, 26));
 
     let rows: Vec<Line> = trains
         .iter()
@@ -1522,9 +1545,21 @@ fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
                 ),
                 _ => String::new(),
             };
+            let state = match &train.order {
+                Some(TrainOrder::Sell) => format!("{state} {} vente", g.bullet),
+                Some(TrainOrder::Replace { loco, .. }) => format!(
+                    "{state} {} {}",
+                    g.bullet,
+                    app.data
+                        .locomotive(loco)
+                        .map_or("remplacement", |l| l.name.as_str())
+                ),
+                None if !train.crew.has_driver => format!("{state} {} sans conducteur", g.bullet),
+                None => state,
+            };
             let capacity = loco.map_or(0, |l| m.capacity_of(l));
             let text = format!(
-                "{} {:<32} {:<26} {:<28} {:>9}  revente {:>10} ",
+                "{} {:<30} {:<24} {:<38} {:>9}  revente {:>10} ",
                 cursor(app, i == sel),
                 app.train_name(train),
                 line.map_or("", |l| l.name.as_str()),
@@ -1577,12 +1612,43 @@ fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             Line::raw(""),
             Line::styled(
                 format!(
-                    "Revendre une machine rend {} de son prix d'achat et libère une place sur la ligne. Un train ne se revend qu'à quai.",
+                    "Revendre une machine rend {} de son prix d'achat et libère une place sur la ligne. Un train en route est revendu à son arrivée. Remplacer (r) garde la ligne et l'équipage : on paie la nouvelle machine, moins la reprise de l'ancienne.",
                     format::percent(app.data.balance.resale_ratio)
                 ),
                 t.dim,
             ),
         ];
+        let mut lines = lines;
+        if let Some(train) = trains.get(sel) {
+            let driver = app
+                .world
+                .crew_on(train.id, CrewRole::Driver)
+                .map(|c| c.name.clone());
+            lines.insert(
+                2,
+                match driver {
+                    Some(name) => Line::styled(format!("Conducteur : {name}"), t.text),
+                    None => Line::styled(
+                        "Sans conducteur, ce train reste à quai : recrute ou affecte-en un (s).",
+                        t.warn,
+                    ),
+                },
+            );
+            let order = match &train.order {
+                Some(TrainOrder::Sell) => Some("Vente prévue à la prochaine arrivée.".to_string()),
+                Some(TrainOrder::Replace { loco, paid }) => Some(format!(
+                    "Remplacement prévu à la prochaine arrivée par {} (payé {}).",
+                    app.data
+                        .locomotive(loco)
+                        .map_or(loco.as_str(), |l| l.name.as_str()),
+                    format::money(*paid)
+                )),
+                None => None,
+            };
+            if let Some(order) = order {
+                lines.insert(3, Line::styled(format!("{order} x pour annuler."), t.warn));
+            }
+        }
         Paragraph::new(lines)
             .wrap(Wrap { trim: true })
             .render(detail, buf);
@@ -1591,7 +1657,101 @@ fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         app,
         buf,
         foot,
-        "Entrée : suivre sur la carte    x : revendre    haut/bas : choisir    Échap : fermer",
+        "Entrée : suivre    x : revendre / annuler    r : remplacer la machine    haut/bas : choisir    Échap : fermer",
+    );
+}
+
+// ─────────────────────────── Remplacement ─────────────────────────
+
+fn draw_replace(app: &App, buf: &mut Buffer, area: Rect, train_id: u32, sel: usize) {
+    let t = &app.theme;
+    let g = &app.glyphs;
+    let Some(train) = app.world.train(train_id) else {
+        return;
+    };
+    let locos = &app.data.locomotives;
+    let m = app.world.modifiers(&app.data);
+    let resale = app.world.resale_value(&app.data, train_id).unwrap_or(0.0);
+    let title = format!("Remplacer {}", app.train_name(train));
+    let [list, detail, foot] = panel(app, buf, area, &title, locos.len(), (104, 30));
+
+    let rows: Vec<Line> = locos
+        .iter()
+        .enumerate()
+        .map(|(i, loco)| {
+            let net = loco.cost - resale;
+            let (status, style) = match app.world.replace_blocker(&app.data, train_id, loco) {
+                Some(blocker) => (short_reason(&blocker).to_string(), t.warn),
+                None if app.world.money < net => ("trop chère".to_string(), t.dim),
+                None if net < 0.0 => (format!("+{} de reprise", format::money(-net)), t.good),
+                None => (format!("{} à payer", format::money(net)), t.good),
+            };
+            let text = format!(
+                "{} {:<30} {}  {:>4} km/h  {:>4} pl.  {:>12}  ",
+                cursor(app, i == sel),
+                loco.name,
+                loco.year,
+                loco.top_speed_kmh.round(),
+                m.capacity_of(loco),
+                format::money(loco.cost),
+            );
+            Line::from(vec![
+                Span::styled(text, row_style(app, i == sel)),
+                Span::styled(format!(" {status}"), style),
+            ])
+        })
+        .collect();
+    render_list(buf, list, rows, sel);
+
+    let mut lines = Vec::new();
+    if let (Some(old), Some(new)) = (app.data.locomotive(&train.loco), locos.get(sel)) {
+        let state = app.world.lines.get(&train.line);
+        let speed = |l| allowed_speed(&app.data, &m, l, state);
+        lines.push(Line::styled(
+            format!("{} {} {}", old.name, g.arrow, new.name),
+            t.title,
+        ));
+        lines.push(Line::styled(
+            format!(
+                "Vitesse sur la ligne : {} {} {} km/h {} places : {} {} {}",
+                format::quantity(speed(old)),
+                g.arrow,
+                format::quantity(speed(new)),
+                g.bullet,
+                m.capacity_of(old),
+                g.arrow,
+                m.capacity_of(new)
+            ),
+            t.text,
+        ));
+        lines.push(Line::styled(
+            format!(
+                "Prix {} {} reprise de l'ancienne machine {} = {}",
+                format::money(new.cost),
+                g.dash,
+                format::money(resale),
+                format::money(new.cost - resale)
+            ),
+            t.text,
+        ));
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            if train.is_docked() {
+                "Le train est à quai : la machine est changée sur-le-champ. La ligne, l'horaire et l'équipage ne changent pas."
+            } else {
+                "Le train roule : la nouvelle machine prendra le relais à son arrivée. Elle est payée dès la commande, et remboursée si tu annules (x dans la flotte)."
+            },
+            t.dim,
+        ));
+    }
+    Paragraph::new(lines)
+        .wrap(Wrap { trim: true })
+        .render(detail, buf);
+    footer(
+        app,
+        buf,
+        foot,
+        "Entrée : remplacer    haut/bas : choisir    Échap : retour à la flotte",
     );
 }
 
@@ -1894,10 +2054,16 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("u", "améliorations de la ligne (rails, caténaire...)"),
         ("c", "combustibles : stocks et cours du jour"),
         ("t", "tarifs et horaires, satisfaction des clientèles"),
-        ("s", "équipages : conducteurs et contrôleurs, recrutement"),
+        (
+            "s",
+            "équipages : recrutement, affectation, formations (1/2/3)",
+        ),
         ("g", "services : automatiser réparations, achats, horaires"),
         ("o", "compagnie : nationaliser, bonus permanents"),
-        ("v", "flotte : liste des trains, revente"),
+        (
+            "v",
+            "flotte : revente (même en route), remplacement de machine (r)",
+        ),
         ("b", "tableau des départs et arrivées"),
         ("m", "remettre la voie à neuf"),
         ("f", "suivre le train sélectionné"),

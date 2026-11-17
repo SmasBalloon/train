@@ -387,6 +387,11 @@ impl GameData {
         non_negative("crew : skill_wage", c.skill_wage)?;
         non_negative("crew : hire_fee_hours", c.hire_fee_hours)?;
         non_negative("crew : xp_per_km", c.xp_per_km)?;
+        non_negative("crew : training_cost", c.training_cost)?;
+        non_negative("crew : training_cost_growth", c.training_cost_growth)?;
+        if !(c.training_gain > 0.0 && c.training_gain <= 1.0) {
+            bail!("crew : training_gain doit être compris entre 0 (exclu) et 1");
+        }
         let e = &c.effects;
         for (name, v) in [
             ("driving_accel", e.driving_accel),

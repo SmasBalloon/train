@@ -325,6 +325,9 @@ pub struct CrewRules {
     pub skill_wage: f64,
     pub hire_fee_hours: f64,
     pub xp_per_km: f64,
+    pub training_gain: f64,
+    pub training_cost: f64,
+    pub training_cost_growth: f64,
     pub effects: CrewEffects,
     pub names: CrewNames,
 }

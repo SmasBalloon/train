@@ -50,6 +50,18 @@ pub enum SimEvent {
         quantity: f64,
         cost: f64,
     },
+    /// Un train a été revendu à son arrivée, comme prévu.
+    TrainSold {
+        train: u32,
+        loco: String,
+        refund: f64,
+    },
+    /// La machine d'un train a été remplacée à son arrivée, comme prévu.
+    TrainReplaced {
+        train: u32,
+        old: String,
+        new: String,
+    },
 }
 
 /// Facteur de vitesse imposé par l'état de la voie.
@@ -460,7 +472,11 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                         .map_or(b.station_waiting_cap, |(_, cap)| *cap);
                     station_fill = station.total() / station_cap;
                 }
-                if m.auto_dispatch && waited >= water_wait_s(era, &m, loco) {
+                if m.auto_dispatch
+                    && train.crew.has_driver
+                    && train.order.is_none()
+                    && waited >= water_wait_s(era, &m, loco)
+                {
                     let due = clock >= train.sched_departure;
                     if count >= capacity || (due && count > 0) {
                         if let Some(trip) =
@@ -617,6 +633,25 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
         }
     }
 
+    // Ventes et remplacements prévus : exécutés dès l'arrivée à quai.
+    let ordered: Vec<u32> = world
+        .trains
+        .iter()
+        .filter(|t| t.order.is_some() && t.is_docked())
+        .map(|t| t.id)
+        .collect();
+    for train in ordered {
+        match world.execute_order(data, train) {
+            Some((loco, None, refund)) => events.push(SimEvent::TrainSold {
+                train,
+                loco,
+                refund,
+            }),
+            Some((old, Some(new), _)) => events.push(SimEvent::TrainReplaced { train, old, new }),
+            None => {}
+        }
+    }
+
     // Les équipages apprennent en roulant, et sont payés à l'heure.
     for (train, km) in driven {
         world.train_crew_experience(&data.crew, train, km);
@@ -663,6 +698,8 @@ mod tests {
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
+        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        data.crew.base_wage = 0.0;
         (World::new(&data), data)
     }
 
@@ -683,6 +720,7 @@ mod tests {
     fn flat_data() -> GameData {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
+        data.crew.base_wage = 0.0;
         data.traffic.truncate(1);
         let class = &mut data.traffic[0];
         class.share = 1.0;
@@ -1029,7 +1067,8 @@ mod tests {
         world.fuel.insert("coal".into(), 5.0);
         world.dispatch(&data, 1).unwrap();
         advance(&mut world, &data, 4000.0);
-        assert!((world.fuel_stock("coal") - (5.0 - 0.228)).abs() < 1e-9);
+        // (à peine moins : le conducteur a appris l'économie au premier trajet)
+        assert!((world.fuel_stock("coal") - (5.0 - 0.228)).abs() < 1e-4);
     }
 
     #[test]

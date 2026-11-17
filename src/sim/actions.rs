@@ -7,8 +7,9 @@ use crate::data::{
     Upgrade,
 };
 
+use super::crew::CrewRole;
 use super::tick::{plan_trip, station_capacity, water_wait_s};
-use super::world::{ActiveResearch, TrainState, World};
+use super::world::{ActiveResearch, TrainOrder, TrainState, World};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActionError {
@@ -58,6 +59,18 @@ pub enum ActionError {
     /// La ligne ne touche aucune gare déjà desservie.
     NotConnected,
     LineNotBuilt,
+    /// Personne pour conduire ce train.
+    NoDriver,
+    /// Le train est déjà tiré par cette machine.
+    SameLocomotive,
+}
+
+/// Issue d'une vente ou d'un remplacement : fait sur-le-champ (montant
+/// encaissé, ou payé pour un remplacement), ou prévu à la prochaine arrivée.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderOutcome {
+    Done(f64),
+    Scheduled,
 }
 
 impl fmt::Display for ActionError {
@@ -114,6 +127,10 @@ impl fmt::Display for ActionError {
                 )
             }
             ActionError::LineNotBuilt => write!(f, "Cette ligne n'est pas encore construite"),
+            ActionError::NoDriver => {
+                write!(f, "Ce train n'a pas de conducteur : recrutes-en un (s)")
+            }
+            ActionError::SameLocomotive => write!(f, "Ce train est déjà tiré par cette machine"),
         }
     }
 }
@@ -182,6 +199,23 @@ impl World {
         loco: &Locomotive,
         line_id: &str,
     ) -> Option<ActionError> {
+        if let Some(blocker) = self.loco_blocker(data, loco, line_id) {
+            return Some(blocker);
+        }
+        if self.trains_on(line_id) >= self.line_capacity(data, line_id) {
+            return Some(ActionError::LineFull);
+        }
+        None
+    }
+
+    /// Ce qui empêche cette machine de rouler sur cette ligne : époque,
+    /// recherche ou équipement de la voie (la place sur la ligne mise à part).
+    fn loco_blocker(
+        &self,
+        data: &GameData,
+        loco: &Locomotive,
+        line_id: &str,
+    ) -> Option<ActionError> {
         if let Err(e) = self.check_era(data, &loco.era) {
             return Some(e);
         }
@@ -198,9 +232,6 @@ impl World {
                 .upgrade(upgrade)
                 .map_or(upgrade.clone(), |u| u.name.fr.clone());
             return Some(ActionError::NeedsUpgrade(name));
-        }
-        if self.trains_on(line_id) >= self.line_capacity(data, line_id) {
-            return Some(ActionError::LineFull);
         }
         None
     }
@@ -223,7 +254,12 @@ impl World {
             return Err(blocker);
         }
         self.pay(loco.cost)?;
-        Ok(self.spawn_train(loco_id, line_id))
+        let train = self.spawn_train(loco_id, line_id);
+        // Un conducteur en réserve prend aussitôt la nouvelle machine.
+        if let Some(driver) = self.reserve(CrewRole::Driver).map(|m| m.id) {
+            let _ = self.assign_crew(driver, Some(train));
+        }
+        Ok(train)
     }
 
     /// Somme récupérée en revendant une machine.
@@ -232,8 +268,168 @@ impl World {
         Some(loco.cost * data.balance.resale_ratio)
     }
 
-    /// Revend un train à quai ; ses voyageurs retournent attendre en gare.
-    pub fn sell_train(&mut self, data: &GameData, train_id: u32) -> Result<f64, ActionError> {
+    /// Revend un train : sur-le-champ s'il est à quai, sinon à sa prochaine
+    /// arrivée. Un remplacement déjà commandé est alors annulé et remboursé.
+    pub fn sell_train(
+        &mut self,
+        data: &GameData,
+        train_id: u32,
+    ) -> Result<OrderOutcome, ActionError> {
+        let train = self.train(train_id).ok_or(ActionError::UnknownTrain)?;
+        if train.is_docked() {
+            self.cancel_order(train_id)?;
+            return self.sell_now(data, train_id).map(OrderOutcome::Done);
+        }
+        self.cancel_order(train_id)?;
+        if let Some(train) = self.train_mut(train_id) {
+            train.order = Some(TrainOrder::Sell);
+        }
+        Ok(OrderOutcome::Scheduled)
+    }
+
+    /// Annule la vente ou le remplacement prévu ; rembourse un remplacement payé.
+    pub fn cancel_order(&mut self, train_id: u32) -> Result<(), ActionError> {
+        let train = self.train_mut(train_id).ok_or(ActionError::UnknownTrain)?;
+        if let Some(TrainOrder::Replace { paid, .. }) = train.order.take() {
+            self.money += paid;
+        }
+        Ok(())
+    }
+
+    /// Ce qui empêche de remplacer la machine d'un train par `loco`, argent mis à part.
+    pub fn replace_blocker(
+        &self,
+        data: &GameData,
+        train_id: u32,
+        loco: &Locomotive,
+    ) -> Option<ActionError> {
+        let Some(train) = self.train(train_id) else {
+            return Some(ActionError::UnknownTrain);
+        };
+        if train.loco == loco.id {
+            return Some(ActionError::SameLocomotive);
+        }
+        self.loco_blocker(data, loco, &train.line)
+    }
+
+    /// Prix d'un remplacement : la nouvelle machine, moins la reprise de l'ancienne.
+    /// Négatif quand on passe à une machine moins chère.
+    pub fn replacement_cost(
+        &self,
+        data: &GameData,
+        train_id: u32,
+        loco: &Locomotive,
+    ) -> Option<f64> {
+        Some(loco.cost - self.resale_value(data, train_id)?)
+    }
+
+    /// Remplace la machine d'un train sans toucher à sa ligne ni à son équipage :
+    /// sur-le-champ s'il est à quai, sinon à sa prochaine arrivée (payé dès la
+    /// commande). Renvoie le montant payé quand c'est fait.
+    pub fn replace_train(
+        &mut self,
+        data: &GameData,
+        train_id: u32,
+        loco_id: &str,
+    ) -> Result<OrderOutcome, ActionError> {
+        let loco = data
+            .locomotive(loco_id)
+            .ok_or(ActionError::UnknownLocomotive)?;
+        if let Some(blocker) = self.replace_blocker(data, train_id, loco) {
+            return Err(blocker);
+        }
+        // Une commande précédente est annulée (et remboursée) avant de payer la nouvelle.
+        let previous = self.train(train_id).and_then(|t| t.order.clone());
+        self.cancel_order(train_id)?;
+        let net = self
+            .replacement_cost(data, train_id, loco)
+            .ok_or(ActionError::UnknownTrain)?;
+        let paid = net.max(0.0);
+        if let Err(e) = self.pay(paid) {
+            // Rien ne change si l'on ne peut pas payer.
+            if let Some(TrainOrder::Replace { paid, .. }) = &previous {
+                self.money -= paid;
+            }
+            if let Some(train) = self.train_mut(train_id) {
+                train.order = previous;
+            }
+            return Err(e);
+        }
+        if let Some(train) = self.train_mut(train_id) {
+            train.order = Some(TrainOrder::Replace {
+                loco: loco_id.to_string(),
+                paid,
+            });
+        }
+        if self.train(train_id).is_some_and(|t| t.is_docked()) {
+            self.execute_order(data, train_id);
+            return Ok(OrderOutcome::Done(net));
+        }
+        Ok(OrderOutcome::Scheduled)
+    }
+
+    /// Exécute l'ordre d'un train à quai. Renvoie ce qui a été fait :
+    /// `(ancienne machine, nouvelle machine ou None si vendu, montant encaissé)`.
+    pub(crate) fn execute_order(
+        &mut self,
+        data: &GameData,
+        train_id: u32,
+    ) -> Option<(String, Option<String>, f64)> {
+        let train = self.train_mut(train_id)?;
+        if !train.is_docked() {
+            return None;
+        }
+        let old = train.loco.clone();
+        match train.order.take()? {
+            TrainOrder::Sell => {
+                let refund = self.sell_now(data, train_id).ok()?;
+                Some((old, None, refund))
+            }
+            TrainOrder::Replace { loco, paid } => {
+                let Some(new) = data.locomotive(&loco) else {
+                    self.money += paid;
+                    return None;
+                };
+                // Reprise de l'ancienne machine au-delà de ce qui a été payé (passage
+                // à une machine moins chère).
+                let credit = (self.resale_value(data, train_id).unwrap_or(0.0) - new.cost).max(0.0);
+                self.money += credit;
+                let capacity = self.modifiers(data).capacity_of(new);
+                let line = data.line(&self.train(train_id)?.line);
+                let train = self.train_mut(train_id)?;
+                train.loco = loco.clone();
+                // Les voyageurs en trop redescendent sur le quai.
+                let mut excess = std::collections::BTreeMap::new();
+                while train.count() > capacity {
+                    let over = train.count() - capacity;
+                    let Some((class, n)) = train.load.iter_mut().max_by_key(|(_, n)| **n) else {
+                        break;
+                    };
+                    let off = (*n).min(over);
+                    if off == 0 {
+                        break;
+                    }
+                    *n -= off;
+                    *excess.entry(class.clone()).or_insert(0.0) += off as f64;
+                }
+                train.load.retain(|_, n| *n > 0);
+                let origin = line.map(|l| train.dir.origin(l).to_string());
+                if let Some(station) = origin.and_then(|id| self.stations.get_mut(&id)) {
+                    for (class, n) in excess {
+                        *station.waiting.entry(class).or_default() += n;
+                    }
+                }
+                Some((old, Some(loco), credit))
+            }
+        }
+    }
+
+    fn train_mut(&mut self, id: u32) -> Option<&mut super::world::Train> {
+        self.trains.iter_mut().find(|t| t.id == id)
+    }
+
+    /// Revend sur-le-champ un train à quai ; ses voyageurs retournent attendre en gare.
+    fn sell_now(&mut self, data: &GameData, train_id: u32) -> Result<f64, ActionError> {
         let index = self
             .trains
             .iter()
@@ -282,6 +478,9 @@ impl World {
         let TrainState::AtStation { waited } = train.state else {
             return Err(ActionError::NotAtStation);
         };
+        if !train.crew.has_driver {
+            return Err(ActionError::NoDriver);
+        }
         let loco = data
             .locomotive(&train.loco)
             .ok_or(ActionError::UnknownLocomotive)?;
@@ -745,13 +944,15 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::advance;
+    use crate::sim::{SimEvent, advance};
 
     const LINE: &str = "stockton_darlington";
 
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
+        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        data.crew.base_wage = 0.0;
         (World::new(&data), data)
     }
 
@@ -851,16 +1052,117 @@ mod tests {
         let (mut world, data) = setup();
         world.trains[0].load.insert("tourist".into(), 7);
         assert_eq!(world.resale_value(&data, 1), Some(200.0));
-        assert_eq!(world.sell_train(&data, 1), Ok(200.0));
+        assert_eq!(world.sell_train(&data, 1), Ok(OrderOutcome::Done(200.0)));
         assert!(world.trains.is_empty());
         assert_eq!(world.money, 250.0);
         assert_eq!(world.stations["stockton"].waiting["tourist"], 7.0);
         assert_eq!(world.sell_train(&data, 1), Err(ActionError::UnknownTrain));
+    }
 
+    #[test]
+    fn a_running_train_is_sold_when_it_arrives() {
+        let (mut world, data) = setup();
+        world.dispatch(&data, 1).unwrap();
+        assert_eq!(world.sell_train(&data, 1), Ok(OrderOutcome::Scheduled));
+        assert_eq!(world.trains[0].order, Some(TrainOrder::Sell));
+        // On peut se raviser tant qu'il roule.
+        world.cancel_order(1).unwrap();
+        assert_eq!(world.trains[0].order, None);
+        world.sell_train(&data, 1).unwrap();
+        let events = advance(&mut world, &data, 4000.0);
+        assert!(world.trains.is_empty(), "revendu à l'arrivée");
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::TrainSold { train: 1, refund, .. } if *refund == 200.0
+        )));
+        // Son conducteur retourne en réserve.
+        assert!(world.crew.iter().all(|m| m.train.is_none()));
+    }
+
+    #[test]
+    fn replacing_keeps_line_crew_and_id_and_costs_the_difference() {
+        let (mut world, data) = setup();
+        world.research_done.insert("multitubular_boiler".into());
+        assert_eq!(
+            world.replace_train(&data, 1, "locomotion_1"),
+            Err(ActionError::SameLocomotive)
+        );
+        assert_eq!(
+            world.replace_train(&data, 1, "crampton"),
+            Err(ActionError::WrongEra("Âge d'or de la vapeur".into()))
+        );
+        let rocket = data.locomotive("rocket").unwrap();
+        let net = rocket.cost - 200.0;
+        assert_eq!(world.replacement_cost(&data, 1, rocket), Some(net));
+        assert_eq!(
+            world.replace_train(&data, 1, "rocket"),
+            Err(ActionError::NotEnoughMoney { needed: net })
+        );
+        // La ligne est pleine : remplacer n'y ajoute pas de train.
+        world.money = 1e6;
+        while world.trains_on(LINE) < world.line_capacity(&data, LINE) {
+            world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
+        }
+        assert_eq!(world.trains_on(LINE), world.line_capacity(&data, LINE));
+        let driver = world.crew_on(1, CrewRole::Driver).unwrap().id;
+        let money = world.money;
+        assert_eq!(
+            world.replace_train(&data, 1, "rocket"),
+            Ok(OrderOutcome::Done(net))
+        );
+        assert_eq!(world.money, money - net);
+        let train = world.train(1).unwrap();
+        assert_eq!((train.loco.as_str(), train.line.as_str()), ("rocket", LINE));
+        assert_eq!(world.crew_on(1, CrewRole::Driver).unwrap().id, driver);
+        assert_eq!(world.trains_on(LINE), world.line_capacity(&data, LINE));
+    }
+
+    #[test]
+    fn a_running_train_is_replaced_on_arrival_and_cancelling_refunds() {
+        let (mut world, data) = setup();
+        world.research_done.insert("multitubular_boiler".into());
+        world.money = 10_000.0;
+        world.dispatch(&data, 1).unwrap();
+        assert_eq!(
+            world.replace_train(&data, 1, "rocket"),
+            Ok(OrderOutcome::Scheduled)
+        );
+        let net = data.locomotive("rocket").unwrap().cost - 200.0;
+        assert_eq!(world.money, 10_000.0 - net, "payé à la commande");
+        world.cancel_order(1).unwrap();
+        assert_eq!(world.money, 10_000.0, "remboursé à l'annulation");
+        // Vendre après avoir commandé un remplacement l'annule et le rembourse.
+        world.replace_train(&data, 1, "rocket").unwrap();
+        world.sell_train(&data, 1).unwrap();
+        assert_eq!(world.money, 10_000.0);
+        assert_eq!(world.trains[0].order, Some(TrainOrder::Sell));
+
+        world.replace_train(&data, 1, "rocket").unwrap();
+        assert_eq!(world.trains[0].loco, "locomotion_1", "pas avant l'arrivée");
+        let events = advance(&mut world, &data, 4000.0);
+        assert_eq!(world.trains[0].loco, "rocket");
+        assert_eq!(world.trains[0].order, None);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::TrainReplaced { train: 1, new, .. } if new == "rocket"
+        )));
+    }
+
+    #[test]
+    fn a_train_without_driver_stays_at_the_station() {
+        let (mut world, data) = setup();
+        let driver = world.crew_on(1, CrewRole::Driver).unwrap().id;
+        world.assign_crew(driver, None).unwrap();
+        assert_eq!(world.dispatch(&data, 1), Err(ActionError::NoDriver));
+        assert_eq!(world.dispatch_all(&data), 0);
+        // Une machine achetée prend le conducteur en réserve.
         world.money = 1000.0;
         let id = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
-        world.dispatch(&data, id).unwrap();
-        assert_eq!(world.sell_train(&data, id), Err(ActionError::NotAtStation));
+        assert_eq!(world.crew_on(id, CrewRole::Driver).unwrap().id, driver);
+        assert!(world.dispatch(&data, id).is_ok());
+        // La suivante attend qu'on lui en trouve un.
+        let other = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
+        assert_eq!(world.dispatch(&data, other), Err(ActionError::NoDriver));
     }
 
     #[test]

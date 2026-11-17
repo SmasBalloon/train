@@ -8,7 +8,7 @@ use ratatui::crossterm::event::{
 };
 
 use crate::data::{Branch, Country, GameData, Line, Research, Station};
-use crate::sim::{Dir, OfflineReport, SimEvent, Train, World, advance};
+use crate::sim::{CrewRole, Dir, OfflineReport, OrderOutcome, SimEvent, Train, World, advance};
 
 use super::board::{self, Board};
 use super::camera::{Camera, Polyline};
@@ -88,6 +88,13 @@ pub enum Popup {
     },
     /// Liste des trains.
     Fleet {
+        sel: usize,
+    },
+    /// Remplacement de la machine d'un train : `sel` est le rang de la
+    /// locomotive proposée, `fleet` le rang du train dans la flotte.
+    Replace {
+        train: u32,
+        fleet: usize,
         sel: usize,
     },
     /// Événement historique : choix à faire.
@@ -453,6 +460,36 @@ impl App {
                     LogKind::Info,
                 );
             }
+            SimEvent::TrainSold {
+                train,
+                loco,
+                refund,
+            } => {
+                let label = self
+                    .data
+                    .locomotive(&loco)
+                    .map_or(loco.clone(), |l| l.name.clone());
+                self.push_log(
+                    format!(
+                        "{label} #{train} revendue à son arrivée pour {}",
+                        format::money(refund)
+                    ),
+                    LogKind::Info,
+                );
+            }
+            SimEvent::TrainReplaced { train, old, new } => {
+                let name = |id: &str| {
+                    self.data
+                        .locomotive(id)
+                        .map_or(id.to_string(), |l| l.name.clone())
+                };
+                let text = format!(
+                    "Train #{train} : {} remplacée par {}",
+                    name(&old),
+                    name(&new)
+                );
+                self.push_log(text, LogKind::Good);
+            }
         }
     }
 
@@ -642,10 +679,22 @@ impl App {
             Ok(train) => {
                 self.selected = Some(train);
                 self.popup = Popup::None;
-                self.push_log(
-                    format!("{name} : mise en service, elle attend à quai"),
-                    LogKind::Good,
-                );
+                match self
+                    .world
+                    .crew_on(train, CrewRole::Driver)
+                    .map(|m| m.name.clone())
+                {
+                    Some(driver) => self.push_log(
+                        format!("{name} : mise en service, {driver} est aux commandes"),
+                        LogKind::Good,
+                    ),
+                    None => self.push_log(
+                        format!(
+                            "{name} : livrée, mais il lui faut un conducteur (s pour recruter)"
+                        ),
+                        LogKind::Warn,
+                    ),
+                }
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -736,13 +785,24 @@ impl App {
         }
     }
 
+    /// Revend le train choisi dans la flotte : tout de suite s'il est à quai,
+    /// sinon à son arrivée. Une seconde fois, annule ce qui était prévu.
     fn sell(&mut self, sel: usize) {
         let Some(train) = self.world.trains.get(sel) else {
             return;
         };
         let (id, name) = (train.id, self.train_name(train));
+        if train.order.is_some() {
+            let replacing = matches!(train.order, Some(crate::sim::TrainOrder::Replace { .. }));
+            if self.world.cancel_order(id).is_ok() {
+                self.popup_msg = None;
+                let what = if replacing { "remplacement" } else { "vente" };
+                self.push_log(format!("{name} : {what} annulé(e)"), LogKind::Info);
+            }
+            return;
+        }
         match self.world.sell_train(&self.data, id) {
-            Ok(refund) => {
+            Ok(OrderOutcome::Done(refund)) => {
                 self.popup_msg = None;
                 let count = self.world.trains.len();
                 self.popup = Popup::Fleet {
@@ -752,6 +812,74 @@ impl App {
                     format!("{name} revendue pour {}", format::money(refund)),
                     LogKind::Info,
                 );
+            }
+            Ok(OrderOutcome::Scheduled) => {
+                self.popup_msg = None;
+                self.push_log(
+                    format!("{name} sera revendue à son arrivée (x pour annuler)"),
+                    LogKind::Info,
+                );
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Remplace la machine d'un train par la locomotive de rang `sel`.
+    fn replace(&mut self, train: u32, fleet: usize, sel: usize) {
+        let (Some(loco), Some(current)) = (self.data.locomotives.get(sel), self.world.train(train))
+        else {
+            return;
+        };
+        let (loco_id, loco_name, old) =
+            (loco.id.clone(), loco.name.clone(), self.train_name(current));
+        match self.world.replace_train(&self.data, train, &loco_id) {
+            Ok(outcome) => {
+                self.open(Popup::Fleet { sel: fleet });
+                let text = match outcome {
+                    OrderOutcome::Done(net) if net >= 0.0 => {
+                        format!("{old} remplacée par {loco_name} ({})", format::money(net))
+                    }
+                    OrderOutcome::Done(net) => format!(
+                        "{old} remplacée par {loco_name} (+{} de reprise)",
+                        format::money(-net)
+                    ),
+                    OrderOutcome::Scheduled => format!(
+                        "{old} : {loco_name} prendra le relais à son arrivée (x pour annuler)"
+                    ),
+                };
+                self.push_log(text, LogKind::Good);
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Paie une formation à l'équipier choisi, dans sa compétence `skill`.
+    fn train_skill(&mut self, sel: usize, skill: usize) {
+        let Some(member) = self.world.crew.get(sel) else {
+            return;
+        };
+        let (id, name, label) = (
+            member.id,
+            member.name.clone(),
+            member.role.skills()[skill.min(2)],
+        );
+        match self.world.train_crew_skill(&self.data, id, skill) {
+            Ok(cost) => {
+                self.popup_msg = None;
+                self.push_log(
+                    format!(
+                        "{name} suit une formation : {} ({})",
+                        label.to_lowercase(),
+                        format::money(cost)
+                    ),
+                    LogKind::Good,
+                );
+            }
+            Err(crate::sim::ActionError::MaxLevel) => {
+                self.popup_msg = Some(format!(
+                    "{name} maîtrise déjà parfaitement : {}",
+                    label.to_lowercase()
+                ));
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -763,17 +891,45 @@ impl App {
         if recruiting {
             let name = self.world.candidates.get(sel).map(|c| c.name.clone());
             match self.world.hire_crew(&self.data, sel) {
-                Ok(_) => {
+                Ok(id) => {
                     self.popup_msg = None;
                     let left = self.world.candidates.len();
                     self.popup = Popup::Crew {
                         sel: sel.min(left.saturating_sub(1)),
                         recruiting: true,
                     };
-                    self.push_log(
-                        format!("{} rejoint la compagnie", name.unwrap_or_default()),
-                        LogKind::Good,
-                    );
+                    let name = name.unwrap_or_default();
+                    self.push_log(format!("{name} rejoint la compagnie"), LogKind::Good);
+                    // Un nouveau conducteur prend d'office un train qui n'en a pas,
+                    // de préférence celui sélectionné sur la carte.
+                    let is_driver = self
+                        .world
+                        .crew_member(id)
+                        .is_some_and(|m| m.role == CrewRole::Driver);
+                    let idle = self
+                        .selected
+                        .filter(|t| self.world.train(*t).is_some_and(|t| !t.crew.has_driver))
+                        .or_else(|| {
+                            self.world
+                                .trains
+                                .iter()
+                                .find(|t| !t.crew.has_driver)
+                                .map(|t| t.id)
+                        });
+                    if is_driver
+                        && let Some(train) = idle
+                        && self.world.assign_crew(id, Some(train)).is_ok()
+                    {
+                        let train_name = self
+                            .world
+                            .train(train)
+                            .map(|t| self.train_name(t))
+                            .unwrap_or_default();
+                        self.push_log(
+                            format!("{name} prend les commandes de {train_name}"),
+                            LogKind::Good,
+                        );
+                    }
                 }
                 Err(e) => self.popup_msg = Some(e.to_string()),
             }
@@ -1174,6 +1330,10 @@ impl App {
                     });
                 } else if code == KeyCode::Char('x') && !recruiting {
                     self.dismiss_crew(sel);
+                } else if let KeyCode::Char(c @ '1'..='3') = code
+                    && !recruiting
+                {
+                    self.train_skill(sel, c as usize - '1' as usize);
                 } else if closes || code == KeyCode::Char('s') {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, count) {
@@ -1189,10 +1349,36 @@ impl App {
                     }
                 } else if matches!(code, KeyCode::Char('x') | KeyCode::Delete) {
                     self.sell(sel);
+                } else if code == KeyCode::Char('r') {
+                    if let Some(train) = self.world.trains.get(sel) {
+                        // On ouvre sur la machine actuelle du train.
+                        let current = self
+                            .data
+                            .locomotives
+                            .iter()
+                            .position(|l| l.id == train.loco)
+                            .unwrap_or(0);
+                        self.open(Popup::Replace {
+                            train: train.id,
+                            fleet: sel,
+                            sel: current,
+                        });
+                    }
                 } else if closes || code == KeyCode::Char('v') {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, self.world.trains.len()) {
                     self.open(Popup::Fleet { sel });
+                }
+            }
+            Popup::Replace { train, fleet, sel } => {
+                if self.world.train(train).is_none() {
+                    self.open(Popup::Fleet { sel: 0 });
+                } else if confirms {
+                    self.replace(train, fleet, sel);
+                } else if closes || code == KeyCode::Char('r') {
+                    self.open(Popup::Fleet { sel: fleet });
+                } else if let Some(sel) = move_selection(code, sel, self.data.locomotives.len()) {
+                    self.open(Popup::Replace { train, fleet, sel });
                 }
             }
         }

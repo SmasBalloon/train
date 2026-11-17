@@ -63,7 +63,9 @@ pub fn notice_for(event: &SimEvent, data: &GameData) -> Option<Notice> {
         SimEvent::Departed { .. }
         | SimEvent::Arrived { .. }
         | SimEvent::Repaired { .. }
-        | SimEvent::FuelBought { .. } => None,
+        | SimEvent::FuelBought { .. }
+        | SimEvent::TrainSold { .. }
+        | SimEvent::TrainReplaced { .. } => None,
     }
 }
 

@@ -427,8 +427,19 @@ mod tests {
     fn crew_popup_recruits_and_assigns() {
         let mut app = app(false, ColorMode::Color);
         app.update(0.1);
+        // La machine de départ arrive avec son conducteur débutant.
+        let founder = app
+            .world
+            .crew_on(1, crate::sim::CrewRole::Driver)
+            .unwrap()
+            .name
+            .clone();
+        app.world.crew.clear();
+        app.update(0.1);
+        assert!(!app.world.trains[0].crew.has_driver);
+        assert!(screen(&mut app, 130, 44).contains("SANS CONDUCTEUR"));
         press(&mut app, KeyCode::Char('s'));
-        // Personne n'est encore employé : la fenêtre s'ouvre sur le recrutement.
+        // Personne n'est employé : la fenêtre s'ouvre sur le recrutement.
         assert_eq!(
             app.popup,
             app::Popup::Crew {
@@ -451,13 +462,18 @@ mod tests {
                 "« {expected} » absent de :\n{text}"
             );
         }
+        app.world.money = 0.0;
         press(&mut app, KeyCode::Enter);
         assert!(screen(&mut app, 130, 44).contains("Pas assez d'argent"));
 
         app.world.money = 5000.0;
         let driver = app.world.candidates[0].name.clone();
+        assert_ne!(driver, founder);
         press(&mut app, KeyCode::Enter);
         assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 3));
+        // Le nouveau conducteur prend d'office le train qui n'en avait pas.
+        assert_eq!(app.world.crew[0].train, Some(1));
+        assert!(app.world.trains[0].crew.has_driver);
         // Le suivant de la liste est un contrôleur.
         assert_eq!(
             app.world.candidates[0].role,
@@ -465,22 +481,33 @@ mod tests {
         );
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.world.crew.len(), 2);
+        assert_eq!(
+            app.world.crew[1].train, None,
+            "un contrôleur attend son affectation"
+        );
 
         // Onglet des employés : Entrée affecte au train sélectionné, une seconde fois renvoie en réserve.
         press(&mut app, KeyCode::Tab);
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("Employés 2") && text.contains("en réserve") && text.contains(&driver),
+            text.contains("Employés 2")
+                && text.contains("en réserve")
+                && text.contains(&driver)
+                && text.contains("Formations"),
             "{text}"
         );
-        press(&mut app, KeyCode::Enter);
         press(&mut app, KeyCode::Down);
         press(&mut app, KeyCode::Enter);
         assert!(app.world.crew.iter().all(|m| m.train == Some(1)));
-        assert!(
-            app.world.trains[0].crew.driving() > 0.0 && app.world.trains[0].crew.service() > 0.0
-        );
+        assert!(app.world.trains[0].crew.service() > 0.0);
         assert!(screen(&mut app, 130, 44).contains("Locomotion n°1 #1"));
+
+        // Formation : la compétence choisie progresse, contre paiement.
+        let (before, money) = (app.world.crew[1].skills[0], app.world.money);
+        press(&mut app, KeyCode::Char('1'));
+        assert!((app.world.crew[1].skills[0] - (before + 0.1).min(1.0)).abs() < 1e-9);
+        assert!(app.world.money < money);
+
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.world.crew[1].train, None);
 
@@ -912,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn fleet_popup_sells_docked_trains() {
+    fn fleet_popup_sells_and_replaces_trains() {
         let mut app = app(false, ColorMode::Color);
         app.world.money = 1000.0;
         let data = app.data.clone();
@@ -925,20 +952,53 @@ mod tests {
         press(&mut app, KeyCode::Char('v'));
         let text = screen(&mut app, 120, 40);
         assert!(
-            text.contains("Flotte : 2 trains sur le réseau") && text.contains("à quai à Stockton"),
+            text.contains("Flotte : 2 trains sur le réseau")
+                && text.contains("à quai à Stockton")
+                && text.contains("sans conducteur"),
             "{text}"
         );
+        // Le train en route sera revendu à son arrivée ; une seconde fois, on annule.
         press(&mut app, KeyCode::Char('x'));
-        assert!(screen(&mut app, 120, 40).contains("Ce train est en route"));
+        assert_eq!(
+            app.world.trains[0].order,
+            Some(crate::sim::TrainOrder::Sell)
+        );
+        assert!(screen(&mut app, 120, 40).contains("Vente prévue"));
+        press(&mut app, KeyCode::Char('x'));
+        assert_eq!(app.world.trains[0].order, None);
+
+        // Remplacer la machine à quai : r ouvre le choix, Entrée remplace.
         press(&mut app, KeyCode::Down);
+        app.world.research_done.insert("multitubular_boiler".into());
+        app.world.money = 5000.0;
+        press(&mut app, KeyCode::Char('r'));
+        let text = screen(&mut app, 120, 40);
+        assert!(
+            text.contains("Remplacer Locomotion n°1 #2") && text.contains("machine actuelle"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        assert!(screen(&mut app, 120, 40).contains("déjà tiré par cette machine"));
+        let rocket = data
+            .locomotives
+            .iter()
+            .position(|l| l.id == "rocket")
+            .unwrap();
+        app.open(app::Popup::Replace {
+            train: 2,
+            fleet: 1,
+            sel: rocket,
+        });
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.train(2).unwrap().loco, "rocket");
+        assert_eq!(app.popup, app::Popup::Fleet { sel: 1 });
+
+        // Revente sur-le-champ du train à quai.
+        let money = app.world.money;
         press(&mut app, KeyCode::Char('x'));
         assert_eq!(app.world.trains.len(), 1);
-        // Revente à moitié prix ; l'autre train, en route, a coûté quelques pence entre-temps.
-        assert!(
-            (app.world.money - 800.0).abs() < 0.05,
-            "{}",
-            app.world.money
-        );
+        let refund = data.locomotive("rocket").unwrap().cost * data.balance.resale_ratio;
+        assert!((app.world.money - money - refund).abs() < 0.05);
         press(&mut app, KeyCode::Enter);
         assert!(app.follow && app.popup == app::Popup::None);
     }

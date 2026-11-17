@@ -8,7 +8,7 @@ mod offline;
 mod tick;
 mod world;
 
-pub use actions::{ActionError, UnlockStatus};
+pub use actions::{ActionError, OrderOutcome, UnlockStatus};
 pub use crew::{CrewMember, CrewRole, TrainCrew};
 pub use kinematics::Profile;
 pub use modifiers::{LineProps, Modifiers};
@@ -18,6 +18,6 @@ pub use tick::{
     demand_per_hour, station_capacity, trip_score, water_wait_s,
 };
 pub use world::{
-    ActiveResearch, Dir, LineState, Prestige, SAVE_VERSION, StationState, Train, TrainState, Trip,
-    World, hour_minute,
+    ActiveResearch, Dir, LineState, Prestige, SAVE_VERSION, StationState, Train, TrainOrder,
+    TrainState, Trip, World, hour_minute,
 };
