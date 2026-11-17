@@ -13,7 +13,7 @@ categories = ["games", "command-line-utilities"]
 # `File::try_lock` (verrou de la sauvegarde) : stable depuis Rust 1.89.
 rust-version = "1.89"
 # Ce qui ne sert qu'au développement ne part pas dans le paquet.
-exclude = [".github/", ".gitattributes", "CONTRIBUTING.md"]
+exclude = [".github/", ".gitattributes", "CONTRIBUTING.md", "docs/", "packaging/", "Formula/", "bucket/"]
 
 [lib]
 name = "rainhill"

@@ -1,0 +1,56 @@
+name: Homebrew et Scoop
+
+# Vérifie que le jeu s'installe avec Homebrew (macOS) et Scoop (Windows).
+# Le dépôt sert lui-même de tap Homebrew (Formula/rainhill.rb) et de bucket Scoop
+# (bucket/rainhill.json) : le workflow Release les met à jour dans son commit de
+# version. Rien à publier ici, donc aucun jeton.
+# - Appelé par release.yml juste après la publication.
+# - Lançable à la main (Actions → Homebrew et Scoop → Run workflow).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version attendue après installation (ex. v1.0.0)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  OWNER: ${{ github.repository_owner }}
+  REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+jobs:
+  homebrew:
+    name: brew install (macOS)
+    runs-on: macos-latest
+    steps:
+      - run: |
+          brew tap "$OWNER/rainhill" "$REPO_URL"
+          brew install "$OWNER/rainhill/rainhill"
+          rail --version | grep -F "${TAG#v}"
+          brew test "$OWNER/rainhill/rainhill"
+
+  scoop:
+    name: scoop install (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - run: |
+          Invoke-RestMethod -Uri https://get.scoop.sh -OutFile install-scoop.ps1
+          .\install-scoop.ps1 -RunAsAdmin
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop bucket add rainhill $env:REPO_URL
+          scoop install rainhill/rainhill
+          $out = rail --version
+          Write-Output $out
+          if ($out -notmatch [regex]::Escape($env:TAG.TrimStart('v'))) { throw "mauvaise version : $out" }

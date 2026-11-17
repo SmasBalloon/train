@@ -1,0 +1,32 @@
+# Maintainer: SmasBalloon
+#
+# Paquet AUR de Rainhill : installe le binaire précompilé de la release GitHub.
+# Publié automatiquement par .github/workflows/aur.yml à chaque release : pkgver,
+# pkgrel et les sommes sont alors remplis d'après la release, et .SRCINFO généré.
+# Ce fichier sert de modèle ; ses valeurs sont celles de la dernière mise à jour.
+
+pkgname=rainhill-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain"
+arch=('x86_64' 'aarch64')
+url="https://github.com/SmasBalloon/train"
+license=('LicenseRef-Rainhill-Terminal')
+depends=('gcc-libs' 'glibc')
+optdepends=('libnotify: notifications de bureau du mode démon (rail daemon)')
+provides=('rainhill')
+conflicts=('rainhill')
+options=('!strip' '!debug')
+
+_base="https://github.com/SmasBalloon/train/releases/download/v${pkgver}"
+source_x86_64=("${_base}/rail-v${pkgver}-x86_64-unknown-linux-gnu.tar.gz")
+source_aarch64=("${_base}/rail-v${pkgver}-aarch64-unknown-linux-gnu.tar.gz")
+sha256sums_x86_64=('1428f3a35b20619534b29a38ff63172e9e2374425bc803a2d07aa97811262786')
+sha256sums_aarch64=('adebc0832aca43484664a92266576b0f68c0c3a76271dfa08f28776df83c358d')
+
+package() {
+  cd "rail-v${pkgver}-${CARCH}-unknown-linux-gnu"
+  install -Dm755 rail "${pkgdir}/usr/bin/rail"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}

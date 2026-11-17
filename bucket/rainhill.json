@@ -1,0 +1,40 @@
+{
+    "version": "1.0.0",
+    "description": "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain",
+    "homepage": "https://github.com/SmasBalloon/train",
+    "license": {
+        "identifier": "Rainhill Terminal License",
+        "url": "https://github.com/SmasBalloon/train/blob/v1.0.0/LICENSE"
+    },
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/SmasBalloon/train/releases/download/v1.0.0/rail-v1.0.0-x86_64-pc-windows-msvc.zip",
+            "hash": "1c204286dfb083b899fb56cb49a8fd489b52c7c8a55bace1e2300555f445adf6",
+            "extract_dir": "rail-v1.0.0-x86_64-pc-windows-msvc"
+        },
+        "arm64": {
+            "url": "https://github.com/SmasBalloon/train/releases/download/v1.0.0/rail-v1.0.0-aarch64-pc-windows-msvc.zip",
+            "hash": "b392474bb5c03073498841a9a448597a624df2b9d32c0766f4329cefa2243735",
+            "extract_dir": "rail-v1.0.0-aarch64-pc-windows-msvc"
+        }
+    },
+    "bin": "rail.exe",
+    "checkver": {
+        "github": "https://github.com/SmasBalloon/train"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/SmasBalloon/train/releases/download/v$version/rail-v$version-x86_64-pc-windows-msvc.zip",
+                "extract_dir": "rail-v$version-x86_64-pc-windows-msvc"
+            },
+            "arm64": {
+                "url": "https://github.com/SmasBalloon/train/releases/download/v$version/rail-v$version-aarch64-pc-windows-msvc.zip",
+                "extract_dir": "rail-v$version-aarch64-pc-windows-msvc"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS.txt"
+        }
+    }
+}

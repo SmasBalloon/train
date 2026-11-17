@@ -9,14 +9,22 @@ traverse les époques, de la vapeur jusqu'aux trains du futur.
 
 ## Installation
 
-Il faut une chaîne Rust récente (édition 2024).
+| Système                | Commande                                        |
+|------------------------|-------------------------------------------------|
+| macOS, Linux (Homebrew) | `brew tap smasballoon/rainhill https://github.com/SmasBalloon/train`<br>`brew install smasballoon/rainhill/rainhill` |
+| Windows (Scoop)        | `scoop bucket add rainhill https://github.com/SmasBalloon/train`<br>`scoop install rainhill/rainhill` |
+| Arch Linux (AUR)       | `yay -S rainhill-bin`                           |
+| Toute plateforme, avec Rust | `cargo install rainhill`                   |
 
-```sh
-cargo install --path .
-```
+On peut aussi télécharger l'archive de son système sur la page des
+[releases](https://github.com/SmasBalloon/train/releases), la décompresser et
+lancer `rail`. Sous macOS, une archive téléchargée par le navigateur est
+bloquée par Gatekeeper : `xattr -d com.apple.quarantine rail` la débloque.
 
-Le binaire s'appelle `rail`. Sans installation, on peut aussi jouer avec
-`cargo run --release`.
+Le jeu se lance avec la commande `rail`.
+
+Depuis les sources (Rust 1.89 ou plus récent) : `cargo install --path .`, ou
+`cargo run --release` pour jouer sans installer.
 
 ## Lancer une partie
 
