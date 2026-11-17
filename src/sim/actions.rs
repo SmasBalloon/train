@@ -295,9 +295,12 @@ impl World {
             return Err(ActionError::LineFull);
         }
         self.pay(loco.cost * count as f64)?;
-        Ok((0..count)
+        let ids: Vec<u32> = (0..count)
             .map(|_| self.spawn_train(loco_id, line_id))
-            .collect())
+            .collect();
+        // Les conducteurs en réserve prennent les nouvelles machines.
+        self.staff_trains(&ids);
+        Ok(ids)
     }
 
     /// Somme récupérée en revendant une machine.
@@ -1228,14 +1231,56 @@ mod tests {
         world.research_done.insert("hand_signals".into());
         advance(&mut world, &data, 6.0 * 3600.0);
         assert!(world.trains[0].is_docked() && world.trips == 0);
-        // Une machine achetée n'a personne aux commandes tant qu'on ne l'affecte pas,
-        // même avec un conducteur en réserve.
+        // Une machine achetée prend d'office un conducteur de la réserve…
         world.money = 1000.0;
         let id = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
-        assert!(world.crew_on(id, CrewRole::Driver).is_none());
-        assert_eq!(world.dispatch(&data, id), Err(ActionError::NoDriver));
-        world.assign_crew(driver, Some(id)).unwrap();
+        assert_eq!(world.crew_on(id, CrewRole::Driver).unwrap().id, driver);
+        assert!(world.crew_on(1, CrewRole::Driver).is_none());
         assert!(world.dispatch(&data, id).is_ok());
+        // … et attend s'il n'y en a plus.
+        let other = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
+        assert_eq!(world.dispatch(&data, other), Err(ActionError::NoDriver));
+    }
+
+    #[test]
+    fn a_batch_of_locomotives_shares_the_reserve_drivers() {
+        let (mut world, data) = setup();
+        advance(&mut world, &data, 10.0); // tire les candidats du jour
+        world.money = 1e6;
+        world.drivers_hired = 1;
+        let reserve: Vec<u32> = (0..2)
+            .map(|_| {
+                let index = world
+                    .candidates
+                    .iter()
+                    .position(|c| c.role == CrewRole::Driver)
+                    .unwrap();
+                world.hire_crew(&data, index).unwrap()
+            })
+            .collect();
+        // Le train 1 a déjà son conducteur : les recrues attendent en réserve.
+        assert!(
+            reserve
+                .iter()
+                .all(|id| world.crew_member(*id).unwrap().train.is_none())
+        );
+        let ids = world
+            .buy_locomotives(&data, "locomotion_1", LINE, 3)
+            .unwrap();
+        let manned = ids
+            .iter()
+            .filter(|t| world.crew_on(**t, CrewRole::Driver).is_some())
+            .count();
+        assert_eq!(manned, 2, "deux conducteurs pour trois machines");
+        // Jamais deux conducteurs sur un même train.
+        for t in &world.trains {
+            let drivers = world
+                .crew
+                .iter()
+                .filter(|m| m.train == Some(t.id) && m.role == CrewRole::Driver)
+                .count();
+            assert!(drivers <= 1);
+        }
     }
 
     #[test]

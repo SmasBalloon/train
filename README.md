@@ -91,10 +91,16 @@ s'affiche. Une seconde réelle vaut deux minutes de jeu.
 
 ### Équipages
 
-Un train **ne part jamais sans un conducteur recruté et affecté**. Ouvre les
-équipages (`s`), embauche un candidat dans l'onglet Recrutement, puis, dans
-l'onglet Employés, affecte-le au train sélectionné avec Entrée. La prime du tout
-premier conducteur est offerte, pour pouvoir démarrer.
+Un train **ne part jamais sans conducteur**, et n'en a **jamais plus d'un**.
+Ouvre les équipages (`s`) et embauche un conducteur dans l'onglet Recrutement :
+il prend aussitôt un train qui n'en a pas (le train sélectionné d'abord), ou
+attend en réserve si tous sont pourvus. Les trains neufs reçoivent les
+conducteurs en réserve. La prime du tout premier conducteur est offerte, pour
+pouvoir démarrer.
+
+Pour changer de conducteur, sélectionne le train, puis Entrée sur un employé
+dans l'onglet Employés : le titulaire retourne en réserve. Entrée une seconde
+fois renvoie le conducteur en réserve.
 
 - **Conducteur** : conduite (accélération et freinage), économie (consommation),
   douceur (usure de la voie).

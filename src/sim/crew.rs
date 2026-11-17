@@ -448,6 +448,26 @@ impl World {
 
     /// Embauche le candidat de rang `index` ; renvoie son identifiant.
     pub fn hire_crew(&mut self, data: &GameData, index: usize) -> Result<u32, ActionError> {
+        self.hire_crew_for(data, index, None)
+    }
+
+    /// Premier train sans conducteur affecté, `prefer` d'abord s'il en manque.
+    pub fn driverless_train(&self, prefer: Option<u32>) -> Option<u32> {
+        let free = |id: u32| self.crew_on(id, CrewRole::Driver).is_none();
+        prefer
+            .filter(|id| self.train(*id).is_some() && free(*id))
+            .or_else(|| self.trains.iter().map(|t| t.id).find(|id| free(*id)))
+    }
+
+    /// Embauche le candidat de rang `index`. Un conducteur prend aussitôt un
+    /// train qui n'en a pas (`prefer` d'abord) ; s'il n'y en a aucun, il attend
+    /// en réserve. Renvoie son identifiant.
+    pub fn hire_crew_for(
+        &mut self,
+        data: &GameData,
+        index: usize,
+        prefer: Option<u32>,
+    ) -> Result<u32, ActionError> {
         let candidate = self.candidates.get(index).ok_or(ActionError::UnknownCrew)?;
         let fee = self.hire_fee(data, candidate);
         if self.money < fee {
@@ -460,8 +480,33 @@ impl World {
         }
         self.next_crew_id += 1;
         member.id = self.next_crew_id;
+        let is_driver = member.role == CrewRole::Driver;
         self.crew.push(member);
-        Ok(self.next_crew_id)
+        let id = self.next_crew_id;
+        if is_driver && let Some(train) = self.driverless_train(prefer) {
+            self.assign_crew(id, Some(train))?;
+        }
+        Ok(id)
+    }
+
+    /// Donne aux trains `trains` qui n'ont pas de conducteur un conducteur de
+    /// la réserve, les plus compétents d'abord (ceux en formation en dernier).
+    pub(crate) fn staff_trains(&mut self, trains: &[u32]) {
+        let mut reserve: Vec<(bool, f64, u32)> = self
+            .crew
+            .iter()
+            .filter(|m| m.role == CrewRole::Driver && m.train.is_none())
+            .map(|m| (self.in_training(m.id), -m.average(), m.id))
+            .collect();
+        reserve.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut reserve = reserve.into_iter().map(|(_, _, id)| id);
+        for &train in trains {
+            if self.crew_on(train, CrewRole::Driver).is_some() {
+                continue;
+            }
+            let Some(driver) = reserve.next() else { break };
+            let _ = self.assign_crew(driver, Some(train));
+        }
     }
 
     /// Affecte un équipier à un train (ou le met en réserve avec `None`). Celui
@@ -786,7 +831,7 @@ mod tests {
         advance(&mut world, &data, 10.0);
         assert!(world.crew.is_empty() && !world.trains[0].crew.has_driver);
         assert_eq!(world.dispatch(&data, 1), Err(ActionError::NoDriver));
-        // Recruter ne suffit pas : il faut l'affecter au train.
+        // Recruté, il prend d'office le train qui n'avait personne.
         let index = world
             .candidates
             .iter()
@@ -795,7 +840,8 @@ mod tests {
         assert_eq!(world.hire_fee(&data, &world.candidates[index]), 0.0);
         let id = world.hire_crew(&data, index).unwrap();
         assert_eq!(world.money, data.balance.start_money, "prime offerte");
-        assert_eq!(world.dispatch(&data, 1), Err(ActionError::NoDriver));
+        assert_eq!(world.crew_member(id).unwrap().train, Some(1));
+        assert!(world.dispatch(&data, 1).is_ok());
         // Le conducteur suivant se paie.
         let next = world
             .candidates
@@ -803,8 +849,38 @@ mod tests {
             .find(|c| c.role == CrewRole::Driver)
             .unwrap();
         assert!(world.hire_fee(&data, next) > 0.0);
-        world.assign_crew(id, Some(1)).unwrap();
-        assert!(world.dispatch(&data, 1).is_ok());
+    }
+
+    #[test]
+    fn a_train_never_has_two_drivers() {
+        let (mut world, data) = setup();
+        let first = world.crew_on(1, CrewRole::Driver).unwrap().id;
+        let second = member(&mut world, CrewRole::Driver, [0.5; 3]);
+        world.assign_crew(second, Some(1)).unwrap();
+        assert_eq!(
+            world.crew_member(first).unwrap().train,
+            None,
+            "le titulaire cède sa place"
+        );
+        // Une sauvegarde avec deux conducteurs sur un train n'en garde qu'un.
+        world.crew.iter_mut().for_each(|m| m.train = Some(1));
+        world.reconcile(&data);
+        let drivers = world
+            .crew
+            .iter()
+            .filter(|m| m.train == Some(1) && m.role == CrewRole::Driver)
+            .count();
+        assert_eq!(drivers, 1);
+        // Une recrue ne prend jamais un train déjà pourvu.
+        world.money = 1e6;
+        world.drivers_hired = 1;
+        let index = world
+            .candidates
+            .iter()
+            .position(|c| c.role == CrewRole::Driver)
+            .unwrap();
+        let id = world.hire_crew(&data, index).unwrap();
+        assert_eq!(world.crew_member(id).unwrap().train, None);
     }
 
     #[test]

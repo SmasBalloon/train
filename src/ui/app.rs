@@ -718,15 +718,37 @@ impl App {
             Ok(trains) => {
                 self.selected = trains.first().copied();
                 self.popup = Popup::None;
-                let text = match trains.len() {
-                    1 => format!(
-                        "{name} : livrée à quai. Affecte-lui un conducteur (s) pour qu'elle roule"
+                let manned: Vec<String> = trains
+                    .iter()
+                    .filter_map(|t| self.world.crew_on(*t, CrewRole::Driver))
+                    .map(|m| m.name.clone())
+                    .collect();
+                let missing = trains.len() - manned.len();
+                let delivered = match trains.len() {
+                    1 => format!("{name} livrée à quai"),
+                    n => format!("{n} × {name} livrées à quai"),
+                };
+                let (text, kind) = match (manned.is_empty(), missing) {
+                    (false, 0) => (
+                        format!("{delivered}, aux commandes : {}", manned.join(", ")),
+                        LogKind::Good,
                     ),
-                    n => format!(
-                        "{n} × {name} livrées à quai. Affecte-leur un conducteur chacune (s) pour qu'elles roulent"
+                    (true, _) => (
+                        format!(
+                            "{delivered}. Aucun conducteur en réserve : recrutes-en (s) pour qu'elles roulent"
+                        ),
+                        LogKind::Warn,
+                    ),
+                    (false, n) => (
+                        format!(
+                            "{delivered}, aux commandes : {}. Il manque {n} conducteur{} : recrute (s)",
+                            manned.join(", "),
+                            if n > 1 { "s" } else { "" }
+                        ),
+                        LogKind::Warn,
                     ),
                 };
-                self.push_log(text, LogKind::Warn);
+                self.push_log(text, kind);
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -985,7 +1007,7 @@ impl App {
     fn crew_action(&mut self, sel: usize, recruiting: bool) {
         if recruiting {
             let name = self.world.candidates.get(sel).map(|c| c.name.clone());
-            match self.world.hire_crew(&self.data, sel) {
+            match self.world.hire_crew_for(&self.data, sel, self.selected) {
                 Ok(id) => {
                     self.popup_msg = None;
                     let left = self.world.candidates.len();
@@ -995,15 +1017,24 @@ impl App {
                     };
                     let name = name.unwrap_or_default();
                     self.push_log(format!("{name} rejoint la compagnie"), LogKind::Good);
-                    let is_driver = self
-                        .world
-                        .crew_member(id)
-                        .is_some_and(|m| m.role == CrewRole::Driver);
-                    if is_driver {
-                        self.push_log(
-                            format!("{name} attend son affectation : Tab, puis Entrée sur le train sélectionné"),
+                    let member = self.world.crew_member(id);
+                    let is_driver = member.is_some_and(|m| m.role == CrewRole::Driver);
+                    let train = member
+                        .and_then(|m| m.train)
+                        .and_then(|t| self.world.train(t))
+                        .map(|t| self.train_name(t));
+                    match train {
+                        Some(train) => self.push_log(
+                            format!("{name} prend les commandes de {train}"),
+                            LogKind::Good,
+                        ),
+                        None if is_driver => self.push_log(
+                            format!(
+                                "{name} attend en réserve : tous les trains ont déjà un conducteur"
+                            ),
                             LogKind::Info,
-                        );
+                        ),
+                        None => {}
                     }
                 }
                 Err(e) => self.popup_msg = Some(e.to_string()),
@@ -1023,6 +1054,13 @@ impl App {
         } else {
             Some(train)
         };
+        // Un seul conducteur (et un seul contrôleur) par train : le titulaire cède sa place.
+        let replaced = target
+            .and_then(|t| {
+                let role = self.world.crew_member(id)?.role;
+                self.world.crew_on(t, role)
+            })
+            .map(|m| m.name.clone());
         match self.world.assign_crew(id, target) {
             Ok(()) => {
                 self.popup_msg = None;
@@ -1031,9 +1069,12 @@ impl App {
                     .train(train)
                     .map(|t| self.train_name(t))
                     .unwrap_or_default();
-                let text = match target {
-                    Some(_) => format!("{name} prend son service sur {train_name}"),
-                    None => format!("{name} retourne en réserve"),
+                let text = match (target, replaced) {
+                    (Some(_), Some(other)) => format!(
+                        "{name} prend son service sur {train_name} ; {other} retourne en réserve"
+                    ),
+                    (Some(_), None) => format!("{name} prend son service sur {train_name}"),
+                    (None, _) => format!("{name} retourne en réserve"),
                 };
                 self.push_log(text, LogKind::Info);
             }

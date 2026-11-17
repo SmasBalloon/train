@@ -2123,52 +2123,76 @@ fn draw_manage(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
     let m = app.world.modifiers(&app.data);
     let era = app.world.era(&app.data);
 
-    let price_note = match ((state.fare_level - 1.0) * 100.0).round() as i64 {
-        0 => "tarif normal".to_string(),
-        p if p > 0 => format!("{p} % plus cher : moins de monde, plus de recette par billet"),
-        p => format!(
-            "{} % moins cher : plus de monde, moins de recette par billet",
-            -p
+    // Sur chaque ligne, un repère court ; l'explication complète du réglage
+    // choisi s'affiche en dessous, où elle peut passer à la ligne.
+    let (price_tag, price_note) = match ((state.fare_level - 1.0) * 100.0).round() as i64 {
+        0 => ("tarif normal".to_string(), "Tarif normal.".to_string()),
+        p if p > 0 => (
+            format!("+{p} %"),
+            format!("{p} % plus cher : moins de monde, plus de recette par billet."),
         ),
+        p => (
+            format!("-{} %", -p),
+            format!(
+                "{} % moins cher : plus de monde, moins de recette par billet.",
+                -p
+            ),
+        ),
+    };
+    let (dwell_tag, dwell_note) = if m.auto_dispatch {
+        (
+            "départ automatique",
+            "Départ automatique à l'heure prévue, ou dès que le train est plein.",
+        )
+    } else {
+        (
+            "départ manuel",
+            "Passé ce délai après l'arrivée, le train est en retard.",
+        )
     };
     let rows = [
         (
             "Prix des billets",
             format!("x{}", format::dec1(state.fare_level)),
-            price_note,
+            price_tag,
         ),
         (
             "Arrêt en gare",
             format!("{} min", state.dwell_min as u32),
-            if m.auto_dispatch {
-                "départ automatique à l'heure prévue, ou dès que le train est plein".to_string()
-            } else {
-                "passé ce délai après l'arrivée, le train est en retard".to_string()
-            },
+            dwell_tag.to_string(),
         ),
     ];
     let lines: Vec<Line> = rows
         .iter()
         .enumerate()
-        .map(|(i, (label, value, note))| {
+        .map(|(i, (label, value, tag))| {
             Line::from(vec![
                 Span::styled(
                     format!("{} {label:<17} < {value:^7} > ", cursor(app, i == sel)),
                     row_style(app, i == sel),
                 ),
-                Span::styled(format!(" {note}"), t.dim),
+                Span::styled(format!(" {tag}"), t.dim),
             ])
         })
         .collect();
     Paragraph::new(lines).render(settings, buf);
 
-    let mut table = vec![Line::styled(
-        format!(
-            "{:<12} {:>5} {:>10} {:>9}   {}",
-            "Clientèle", "Part", "Demande/h", "Billet", "Satisfaction"
+    let note = if sel == 0 {
+        price_note
+    } else {
+        dwell_note.to_string()
+    };
+    let mut table = vec![
+        Line::styled(note, t.text),
+        Line::raw(""),
+        Line::styled(
+            format!(
+                "{:<12} {:>5} {:>10} {:>9}   {}",
+                "Clientèle", "Part", "Demande/h", "Billet", "Satisfaction"
+            ),
+            t.title,
         ),
-        t.title,
-    )];
+    ];
     for class in &app.data.traffic {
         let demand: f64 = [&line.from, &line.to]
             .into_iter()

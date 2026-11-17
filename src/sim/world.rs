@@ -488,6 +488,17 @@ impl World {
             *s = s.clamp(0.0, 1.0);
         }
         self.sync_crew();
+        // Un seul conducteur et un seul contrôleur par train : les doublons
+        // d'une ancienne sauvegarde retournent en réserve.
+        let mut posts = BTreeSet::new();
+        for member in &mut self.crew {
+            if let Some(train) = member.train
+                && !posts.insert((train, member.role == super::crew::CrewRole::Driver))
+            {
+                member.train = None;
+            }
+        }
+        self.sync_crew();
         // Formations : on oublie les inscrits disparus.
         let ids: BTreeSet<u32> = self.crew.iter().map(|m| m.id).collect();
         for t in &mut self.trainings {

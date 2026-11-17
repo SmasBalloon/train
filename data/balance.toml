@@ -1,7 +1,7 @@
 # Réglages d'équilibrage. Un fichier mods/balance.toml peut ne redéfinir
 # que certaines clés ; les autres gardent leur valeur par défaut.
 
-time_scale            = 120.0   # secondes de jeu par seconde réelle
+time_scale            = 60.0    # secondes de jeu par seconde réelle
 start_money           = 50.0
 start_locomotive      = "locomotion_1"
 start_line            = "stockton_darlington"

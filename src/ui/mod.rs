@@ -497,9 +497,9 @@ mod tests {
         let driver = app.world.candidates[0].name.clone();
         press(&mut app, KeyCode::Enter);
         assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 3));
-        // Recruté, mais pas encore affecté : toujours à quai.
-        assert_eq!(app.world.crew[0].train, None);
-        assert!(!app.world.trains[0].crew.has_driver);
+        // Le conducteur recruté prend d'office le train qui n'en avait pas.
+        assert_eq!(app.world.crew[0].train, Some(1));
+        assert!(app.world.trains[0].crew.has_driver);
         // Le suivant de la liste est un contrôleur, payant.
         assert_eq!(
             app.world.candidates[0].role,
@@ -510,6 +510,10 @@ mod tests {
         app.world.money = 5000.0;
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.world.crew.len(), 2);
+        assert_eq!(
+            app.world.crew[1].train, None,
+            "seuls les conducteurs s'affectent seuls"
+        );
 
         // Onglet des employés : Entrée affecte au train sélectionné, une seconde fois renvoie en réserve.
         press(&mut app, KeyCode::Tab);
@@ -518,8 +522,6 @@ mod tests {
             text.contains("Employés 2") && text.contains("en réserve") && text.contains(&driver),
             "{text}"
         );
-        press(&mut app, KeyCode::Enter);
-        assert!(app.world.trains[0].crew.has_driver);
         press(&mut app, KeyCode::Down);
         press(&mut app, KeyCode::Enter);
         assert!(app.world.crew.iter().all(|m| m.train == Some(1)));
@@ -1196,8 +1198,20 @@ mod tests {
         assert_eq!((line.fare_level, line.dwell_min), (1.2, 15.0));
         let text = screen(&mut app, 120, 40);
         assert!(
-            text.contains("x1,2") && text.contains("15 min") && text.contains("20 % plus cher"),
+            text.contains("x1,2") && text.contains("15 min") && text.contains("+20 %"),
             "{text}"
+        );
+        // L'explication du réglage choisi s'affiche en entier, même longue.
+        app.world.research_done.insert("hand_signals".into());
+        let text = screen(&mut app, 120, 40);
+        assert!(
+            text.contains("départ automatique") && text.contains("ou dès que le train est plein."),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Up);
+        assert!(
+            screen(&mut app, 120, 40)
+                .contains("20 % plus cher : moins de monde, plus de recette par billet.")
         );
         press(&mut app, KeyCode::Esc);
         assert_eq!(app.popup, app::Popup::None);
