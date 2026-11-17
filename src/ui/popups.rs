@@ -2293,7 +2293,11 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("t", "tarifs et horaires, satisfaction des clientèles"),
         (
             "s",
-            "équipages : recrutement, affectation, formations (1/2/3)",
+            "équipages : recrutement, affectation au train sélectionné",
+        ),
+        (
+            "i",
+            "formations : programmer une session, inscrire des équipiers",
         ),
         ("g", "services : automatiser réparations, achats, horaires"),
         ("o", "compagnie : nationaliser, bonus permanents"),
