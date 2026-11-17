@@ -691,12 +691,14 @@ mod tests {
             "{text}"
         );
         press(&mut app, KeyCode::Enter);
-        assert!(screen(&mut app, 130, 44).contains("ne vaut pas encore assez"));
+        assert!(screen(&mut app, 130, 44).contains("terminer tout l'arbre de recherche"));
 
         enter(&mut app, "steam");
-        app.world.lifetime_income = 5_000_000.0;
+        let ids: Vec<String> = app.data.research.iter().map(|r| r.id.clone()).collect();
+        app.world.research_done.extend(ids);
         app.world.money = 77_777.0;
-        assert!(screen(&mut app, 130, 44).contains("+17 points"));
+        app.world.prestige.points = 2;
+        assert!(screen(&mut app, 130, 44).contains("+1 points"));
         // Première validation : on demande confirmation ; une autre touche annule.
         press(&mut app, KeyCode::Enter);
         assert!(screen(&mut app, 130, 44).contains("Entrée pour confirmer"));
@@ -714,13 +716,13 @@ mod tests {
         press(&mut app, KeyCode::Enter);
         assert_eq!(
             (app.world.era.as_str(), app.world.prestige.points),
-            ("pioneers", 17)
+            ("pioneers", 3)
         );
         assert_eq!(app.world.money, app.data.balance.start_money);
         // La fenêtre reste ouverte sur les bonus, pour dépenser les points.
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("Compagnie : 17 points de prestige")
+            text.contains("Compagnie : 3 points de prestige")
                 && text.contains("Réputation de la compagnie"),
             "{text}"
         );
@@ -730,7 +732,7 @@ mod tests {
                 app.world.prestige.level("reputation"),
                 app.world.prestige.points
             ),
-            (1, 15)
+            (1, 1)
         );
         assert!(screen(&mut app, 130, 44).contains("recettes +10 %"));
     }

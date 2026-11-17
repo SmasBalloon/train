@@ -121,7 +121,7 @@ impl fmt::Display for ActionError {
             ActionError::PrestigeNotReady => {
                 write!(
                     f,
-                    "La compagnie ne vaut pas encore assez pour être nationalisée"
+                    "Il faut terminer tout l'arbre de recherche avant de nationaliser"
                 )
             }
             ActionError::NotEnoughPoints { needed } => {
@@ -790,19 +790,24 @@ impl World {
 
     // ----- Prestige -----
 
+    /// Recherches terminées sur le total de l'arbre.
+    pub fn research_progress(&self, data: &GameData) -> (usize, usize) {
+        let done = data
+            .research
+            .iter()
+            .filter(|r| self.research_done.contains(&r.id))
+            .count();
+        (done, data.research.len())
+    }
+
     /// Points de prestige que rapporterait la nationalisation de la compagnie :
-    /// un nombre fixe par facteur dix de recettes cumulées.
+    /// rien tant que l'arbre de recherche n'est pas terminé, puis un nombre fixe.
     pub fn prestige_gain(&self, data: &GameData) -> u32 {
-        let b = &data.balance;
-        let reached = data
-            .era_index(&b.prestige_min_era)
-            .is_some_and(|rank| self.era_index(data) >= rank);
-        if !reached {
+        let (done, total) = self.research_progress(data);
+        if done < total {
             return 0;
         }
-        (b.prestige_per_decade * (1.0 + self.lifetime_income / b.prestige_base).log10())
-            .floor()
-            .max(0.0) as u32
+        data.balance.prestige_points
     }
 
     /// Nationalise la compagnie : la partie repart de zéro, les points et les
@@ -1677,28 +1682,30 @@ mod tests {
     fn nationalising_resets_the_company_but_keeps_prestige() {
         let (mut world, data) = setup();
         world.lifetime_income = 5_000_000.0;
+        enter(&mut world, "steam");
+        let ids: Vec<String> = data.research.iter().map(|r| r.id.clone()).collect();
+        world.research_done.extend(ids[1..].iter().cloned());
         assert_eq!(
             world.prestige_gain(&data),
             0,
-            "il faut d'abord atteindre l'âge d'or"
+            "il faut d'abord terminer tout l'arbre de recherche"
         );
         assert_eq!(world.nationalise(&data), Err(ActionError::PrestigeNotReady));
-        enter(&mut world, "steam");
-        // 10 points par facteur dix au-delà de £ 100 000 : log10(51) × 10.
-        assert_eq!(world.prestige_gain(&data), 17);
+        world.research_done.insert(ids[0].clone());
+        assert_eq!(world.prestige_gain(&data), 1);
 
         world.money = 123_456.0;
         world.research_done.insert("hand_signals".into());
         world.staff.insert("track_gangs".into());
         world.lines.get_mut("darlington_york").unwrap().built = true;
-        assert_eq!(world.nationalise(&data), Ok(17));
+        assert_eq!(world.nationalise(&data), Ok(1));
         assert_eq!(
             (
                 world.prestige.points,
                 world.prestige.earned,
                 world.prestige.resets
             ),
-            (17, 17, 1)
+            (1, 1, 1)
         );
         assert_eq!(
             (world.era.as_str(), world.money),
@@ -1754,8 +1761,9 @@ mod tests {
         assert!((report.simulated_s - 600.0).abs() < 1e-9);
 
         // Le capital de départ suit à la prochaine nationalisation, et les niveaux restent.
-        enter(&mut world, "steam");
-        world.lifetime_income = 1e6;
+        world
+            .research_done
+            .extend(data.research.iter().map(|r| r.id.clone()));
         world.nationalise(&data).unwrap();
         assert_eq!(world.money, data.balance.start_money + 2000.0);
         assert_eq!(world.prestige.level("reputation"), 2);

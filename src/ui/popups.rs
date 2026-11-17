@@ -1275,11 +1275,7 @@ fn draw_company(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
 
     let mut lines = Vec::new();
     if sel == 0 {
-        let b = &app.data.balance;
-        let era = app
-            .data
-            .era(&b.prestige_min_era)
-            .map_or("", |e| e.name.fr.as_str());
+        let (done, total) = app.world.research_progress(&app.data);
         lines.push(Line::styled("Nationaliser la compagnie", t.title));
         lines.push(Line::styled(
             "L'État rachète ton réseau. Tu repars de 1825 avec une nouvelle compagnie : lignes, trains, recherches, personnel et argent sont remis à zéro. Les points de prestige et les bonus déjà acquis, eux, restent pour toujours.",
@@ -1287,10 +1283,8 @@ fn draw_company(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         ));
         lines.push(Line::styled(
             format!(
-                "Recettes cumulées de cette compagnie : {}. Chaque facteur dix au-delà de {} rapporte {} points, à partir de l'époque « {era} ».",
-                format::money(app.world.lifetime_income),
-                format::money(b.prestige_base),
-                format::quantity(b.prestige_per_decade)
+                "Possible une fois tout l'arbre de recherche terminé ({done}/{total}). Rapporte {} point(s) de prestige.",
+                app.data.balance.prestige_points
             ),
             t.dim,
         ));

@@ -38,10 +38,9 @@ fare_level_max        = 2.0
 base_comfort          = 0.3     # confort sans aucune recherche (0 à 1)
 satisfaction_inertia  = 200.0   # voyageurs transportés pour faire bouger nettement l'opinion
 
-# Prestige : points gagnés en nationalisant la compagnie
-prestige_min_era      = "steam" # époque à atteindre pour pouvoir nationaliser
-prestige_base         = 100000.0  # recettes cumulées à partir desquelles les points comptent
-prestige_per_decade   = 10.0    # points par facteur dix de recettes au-delà de cette base
+# Prestige : la compagnie ne peut être nationalisée qu'une fois tout
+# l'arbre de recherche terminé, et rapporte alors ce nombre de points.
+prestige_points       = 1
 
 # Gains hors ligne
 offline_max_h         = 8.0     # heures réelles d'absence prises en compte au maximum

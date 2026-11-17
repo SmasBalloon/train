@@ -413,10 +413,10 @@ impl GameData {
         if c.names.first.is_empty() || c.names.last.is_empty() {
             bail!("crew : il faut au moins un prénom et un nom dans [names]");
         }
-        let b = &self.balance;
-        self.era_rank("balance : prestige_min_era", &b.prestige_min_era)?;
-        positive("balance : prestige_base", b.prestige_base)?;
-        positive("balance : prestige_per_decade", b.prestige_per_decade)
+        if self.balance.prestige_points == 0 {
+            bail!("balance : prestige_points doit être au moins 1");
+        }
+        Ok(())
     }
 
     fn validate_balance(&self) -> Result<()> {
