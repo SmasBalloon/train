@@ -1,16 +1,54 @@
-MIT License
+Rainhill Terminal License 1.0
 
 Copyright (c) 2026 SmasBalloon
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Definitions
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+"Software" means Rainhill: its source code, game data (including the files in
+the data/ directory), texts and documentation, in source or compiled form.
+
+"Derivative Work" means any work that contains, is based on, translates,
+ports or adapts all or part of the Software, whether modified or not.
+
+"Terminal Application" means a program whose user interface is presented
+exclusively as text characters inside a text terminal or console (including
+terminal emulators, whether local, remote or running in a web browser), and
+which is controlled through that terminal. Auxiliary output that is not a
+user interface, such as files, logs or operating-system notifications, does
+not change this.
+
+2. Permissions
+
+Subject to the conditions below, permission is hereby granted, free of
+charge, to any person obtaining a copy of the Software, to use, copy, modify,
+merge, publish and distribute the Software and Derivative Works, and to permit
+persons to whom they are furnished to do so.
+
+3. Terminal-only condition
+
+The Software and every Derivative Work must remain a Terminal Application.
+In particular, you may not, without prior written permission from the
+copyright holder:
+
+  a) create, publish or distribute a version of the Software or of a
+     Derivative Work with a graphical, web, mobile, console-game or any other
+     non-terminal user interface;
+
+  b) use all or part of the Software (including its simulation code or its
+     game data) in any program that presents a non-terminal user interface.
+
+4. Notice
+
+The above copyright notice, this license and the third-party notice below
+must be included in all copies or substantial portions of the Software and of
+Derivative Works.
+
+5. Termination
+
+Any use of the Software that does not comply with this license terminates the
+permissions granted in section 2 for the person in breach.
+
+6. Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,7 +63,8 @@ SOFTWARE.
 Third-party material
 
 The transition animation (src/ui/sl.rs) reproduces the drawings and smoke
-movement of sl, distributed under the following terms:
+movement of sl, which is not covered by sections 1 to 5 above and remains
+under its own terms:
 
 Copyright 1993,1998,2014 Toyoda Masashi (mtoyoda@acm.org)
 

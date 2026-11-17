@@ -3,8 +3,18 @@ name = "rainhill"
 version = "0.1.0"
 edition = "2024"
 description = "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain"
-license = "MIT"
+# Licence maison (non SPDX) : usage et modifications libres, en terminal uniquement.
+license-file = "LICENSE"
 default-run = "rail"
+repository = "https://github.com/SmasBalloon/train"
+homepage = "https://github.com/SmasBalloon/train"
+readme = "README.md"
+keywords = ["game", "terminal", "tui", "railway", "incremental"]
+categories = ["games", "command-line-utilities"]
+# Chaînes de `if let … && …` : stables depuis Rust 1.88.
+rust-version = "1.88"
+# Ce qui ne sert qu'au développement ne part pas dans le paquet.
+exclude = [".github/", ".gitattributes", "CONTRIBUTING.md"]
 
 [lib]
 name = "rainhill"

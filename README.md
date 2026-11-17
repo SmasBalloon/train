@@ -189,9 +189,21 @@ La simulation (`src/sim/`) est pure et déterministe : elle ne touche ni au
 terminal, ni au disque, ni à l'horloge. L'interface (`src/ui/`) repose sur
 [ratatui](https://ratatui.rs).
 
+Pour proposer une amélioration, lis [`CONTRIBUTING.md`](CONTRIBUTING.md) :
+vérifications à lancer, format des commits, et signature `git commit -s`.
+
 ## Licence
 
-MIT.
+Rainhill est distribué sous la **Rainhill Terminal License 1.0** (voir
+[`LICENSE`](LICENSE)). En résumé :
+
+- tu peux utiliser, copier, modifier et redistribuer le jeu, gratuitement ;
+- le jeu et toute version dérivée doivent **rester des applications terminal** :
+  pas de version graphique, web ou mobile, et pas de réutilisation du code ou
+  des données dans un programme qui en a une, sans accord écrit de l'auteur ;
+- la mention de copyright et la licence doivent accompagner toute copie.
+
+Ce résumé n'a pas de valeur juridique : seul le texte de `LICENSE` fait foi.
 
 L'animation de transition reprend les dessins et le mouvement de la fumée de
 `sl` : Copyright 1993,1998,2014 Toyoda Masashi (mtoyoda@acm.org). « Everyone
