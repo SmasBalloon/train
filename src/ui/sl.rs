@@ -203,7 +203,11 @@ mod tests {
         assert!(finished(100, DURATION));
         // Au début, seul l'avant de la machine pointe dans la dernière colonne ;
         // à mi-course, la D51 est là, avec sa fumée.
-        assert!(frame(100, 30, 0.0).iter().all(|l| l[..99].trim().is_empty()));
+        assert!(
+            frame(100, 30, 0.0)
+                .iter()
+                .all(|l| l[..99].trim().is_empty())
+        );
         let middle = frame(100, 30, DURATION * 0.45).join("\n");
         assert!(middle.contains("_D _|  |_______/"), "{middle}");
         assert!(middle.contains("|_D__D__D_|"), "{middle}");

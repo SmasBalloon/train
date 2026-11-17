@@ -1,18 +1,33 @@
-//! Sauvegarde locale : un fichier JSON versionné, écrit de façon atomique,
-//! et un verrou pour qu'un seul processus fasse avancer la partie.
+//! Sauvegarde locale : un fichier chiffré et versionné, écrit de façon
+//! atomique, et un verrou pour qu'un seul processus fasse avancer la partie.
+//!
+//! Le fichier est chiffré avec ChaCha20-Poly1305 : on ne peut ni le lire ni le
+//! retoucher à la main, et la moindre modification le rend illisible. La clé
+//! est dans le programme (le jeu doit pouvoir se relire sans mot de passe) :
+//! c'est une protection contre la triche ordinaire, pas un coffre-fort.
 
 use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
 use crate::data::GameData;
 use crate::sim::{OfflineReport, SAVE_VERSION, World, catch_up};
 
-const SAVE_FILE: &str = "save.json";
+const SAVE_FILE: &str = "save.dat";
+/// En-tête du fichier : identifie le format, et lie les données chiffrées à ce format.
+const MAGIC: &[u8; 8] = b"RAILSAV1";
+const NONCE_LEN: usize = 12;
+/// Clé de chiffrement des sauvegardes.
+const KEY: [u8; 32] = [
+    0x52, 0x61, 0x69, 0x6e, 0x68, 0x69, 0x6c, 0x6c, 0x9e, 0x37, 0x79, 0xb9, 0x7f, 0x4a, 0x7c, 0x15,
+    0xbf, 0x58, 0x47, 0x6d, 0x1c, 0xe4, 0xe5, 0xb9, 0x94, 0xd0, 0x49, 0xbb, 0x13, 0x31, 0x11, 0xeb,
+];
 const LOCK_FILE: &str = "rainhill.lock";
 
 #[derive(Serialize, Deserialize)]
@@ -45,10 +60,11 @@ pub fn save(dir: &Path, world: &World) -> Result<()> {
         saved_at: unix_now(),
         world: world.clone(),
     };
-    let json = serde_json::to_string_pretty(&file).context("sérialisation de la sauvegarde")?;
+    let json = serde_json::to_vec(&file).context("sérialisation de la sauvegarde")?;
     let path = save_path(dir);
     let tmp = dir.join(format!("{SAVE_FILE}.tmp"));
-    fs::write(&tmp, json).with_context(|| format!("écriture de {} impossible", tmp.display()))?;
+    fs::write(&tmp, seal(&json)?)
+        .with_context(|| format!("écriture de {} impossible", tmp.display()))?;
     fs::rename(&tmp, &path)
         .with_context(|| format!("écriture de {} impossible", path.display()))?;
     Ok(())
@@ -89,6 +105,44 @@ pub fn save_settings(dir: &Path, settings: &Settings) -> Result<()> {
     fs::write(&path, json).with_context(|| format!("écriture de {} impossible", path.display()))
 }
 
+/// Chiffre des données : en-tête, nonce tiré au hasard, puis texte chiffré.
+fn seal(plain: &[u8]) -> Result<Vec<u8>> {
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&KEY));
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let sealed = cipher
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: plain,
+                aad: MAGIC,
+            },
+        )
+        .map_err(|_| anyhow!("chiffrement de la sauvegarde impossible"))?;
+    let mut out = Vec::with_capacity(MAGIC.len() + NONCE_LEN + sealed.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&sealed);
+    Ok(out)
+}
+
+/// Déchiffre un fichier écrit par `seal` ; `None` s'il a été altéré ou n'en vient pas.
+fn open(bytes: &[u8]) -> Option<Vec<u8>> {
+    let rest = bytes.strip_prefix(MAGIC.as_slice())?;
+    if rest.len() < NONCE_LEN {
+        return None;
+    }
+    let (nonce, sealed) = rest.split_at(NONCE_LEN);
+    ChaCha20Poly1305::new(Key::from_slice(&KEY))
+        .decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                msg: sealed,
+                aad: MAGIC,
+            },
+        )
+        .ok()
+}
+
 /// Partie relue sur le disque, avec l'heure de son écriture (secondes Unix).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loaded {
@@ -124,9 +178,15 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>> {
     if !path.exists() {
         return Ok(None);
     }
-    let json = fs::read_to_string(&path)
-        .with_context(|| format!("lecture de {} impossible", path.display()))?;
-    let file: SaveFile = serde_json::from_str(&json).with_context(|| {
+    let bytes =
+        fs::read(&path).with_context(|| format!("lecture de {} impossible", path.display()))?;
+    let json = open(&bytes).with_context(|| {
+        format!(
+            "{} est altérée ou corrompue ; relance avec --new pour repartir de zéro (l'ancien fichier sera gardé en .bak)",
+            path.display()
+        )
+    })?;
+    let file: SaveFile = serde_json::from_slice(&json).with_context(|| {
         format!(
             "{} est illisible ; relance avec --new pour repartir de zéro (l'ancien fichier sera gardé en .bak)",
             path.display()
@@ -146,7 +206,7 @@ pub fn load(dir: &Path) -> Result<Option<Loaded>> {
     }))
 }
 
-/// Met de côté la sauvegarde existante (`save.json.bak`) avant une nouvelle partie.
+/// Met de côté la sauvegarde existante (`save.dat.bak`) avant une nouvelle partie.
 pub fn backup(dir: &Path) -> Result<()> {
     let path = save_path(dir);
     if path.exists() {
@@ -223,7 +283,40 @@ mod tests {
         assert!(load(&dir).is_err());
         backup(&dir).unwrap();
         assert!(load(&dir).unwrap().is_none());
-        assert!(dir.join("save.json.bak").exists());
+        assert!(dir.join("save.dat.bak").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_save_is_encrypted_and_any_tampering_is_refused() {
+        let dir = temp_dir("sealed");
+        let data = GameData::embedded().unwrap();
+        let mut world = World::new(&data);
+        world.money = 123_456.0;
+        save(&dir, &world).unwrap();
+        let bytes = fs::read(save_path(&dir)).unwrap();
+        assert!(bytes.starts_with(MAGIC));
+        // Rien de lisible : ni l'argent, ni les noms du JSON.
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            !text.contains("123456") && !text.contains("money"),
+            "{text}"
+        );
+        // Deux écritures du même monde ne donnent pas le même fichier (nonce aléatoire).
+        save(&dir, &world).unwrap();
+        assert_ne!(fs::read(save_path(&dir)).unwrap(), bytes);
+        assert_eq!(load(&dir).unwrap().unwrap().world, world);
+
+        // Un seul octet changé, et la sauvegarde est refusée.
+        let mut altered = fs::read(save_path(&dir)).unwrap();
+        let last = altered.len() - 1;
+        altered[last] ^= 1;
+        fs::write(save_path(&dir), &altered).unwrap();
+        let err = load(&dir).unwrap_err().to_string();
+        assert!(err.contains("altérée"), "{err}");
+        // Un JSON en clair (ancienne version de développement) l'est aussi.
+        fs::write(save_path(&dir), serde_json::to_vec(&world).unwrap()).unwrap();
+        assert!(load(&dir).is_err());
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -238,9 +331,10 @@ mod tests {
 
         // On antidate la sauvegarde d'une heure.
         let path = save_path(&dir);
-        let mut file: SaveFile = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let plain = open(&fs::read(&path).unwrap()).unwrap();
+        let mut file: SaveFile = serde_json::from_slice(&plain).unwrap();
         file.saved_at -= 3600;
-        fs::write(&path, serde_json::to_string(&file).unwrap()).unwrap();
+        fs::write(&path, seal(&serde_json::to_vec(&file).unwrap()).unwrap()).unwrap();
 
         let (current, report) = load_current(&dir, &data).unwrap().unwrap();
         assert!((3600.0..3605.0).contains(&report.away_s));

@@ -22,7 +22,7 @@ Le binaire s'appelle `rail`. Sans installation, on peut aussi jouer avec
 
 ```sh
 rail              # interface interactive (carte du réseau)
-rail --new        # recommence une partie (l'ancienne est gardée en save.json.bak)
+rail --new        # recommence une partie (l'ancienne est gardée en save.dat.bak)
 ```
 
 | Commande        | Effet                                                        |
@@ -155,8 +155,16 @@ permanents.
 ## Sauvegarde et mods
 
 La partie est enregistrée dans le dossier de données de l'utilisateur
-(`~/.local/share/rainhill/save.json` sous Linux). La variable
+(`~/.local/share/rainhill/save.dat` sous Linux). La variable
 `RAINHILL_DATA_DIR` permet d'en choisir un autre.
+
+La sauvegarde est chiffrée (ChaCha20-Poly1305) : elle ne se lit pas et ne se
+retouche pas à la main, et un fichier modifié est refusé au chargement. La clé
+étant dans le programme, c'est une protection contre la triche ordinaire, pas
+contre quelqu'un qui lit le code source.
+
+Les parties de la version de développement (`save.json`) ne sont pas reprises :
+la première version officielle repart de zéro.
 
 Toutes les règles du jeu sont dans les fichiers TOML de [`data/`](data/),
 embarqués dans le binaire. Pour les modifier sans recompiler, place des

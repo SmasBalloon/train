@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::data::{BonusKind, Era, GameData, Line};
 
@@ -8,13 +8,11 @@ use super::crew::{CrewMember, TrainCrew, TrainingSession};
 use super::kinematics::Profile;
 use super::modifiers::Modifiers;
 
-pub const SAVE_VERSION: u32 = 7;
+/// Format de la sauvegarde ; repart de 1 avec la première version officielle.
+pub const SAVE_VERSION: u32 = 1;
 
 /// Constante de temps (secondes de jeu) de la moyenne glissante des revenus.
 pub(crate) const INCOME_TAU: f64 = 2.0 * 3600.0;
-
-/// Clé provisoire des voyageurs issus d'une sauvegarde sans catégories.
-const LEGACY_CLASS: &str = "";
 
 fn one() -> f64 {
     1.0
@@ -90,9 +88,6 @@ pub struct Train {
     /// Chargement par catégorie de trafic.
     #[serde(default)]
     pub load: BTreeMap<String, u32>,
-    /// Total de voyageurs d'une sauvegarde au format 1, réparti par `reconcile`.
-    #[serde(default, rename = "passengers", skip_serializing)]
-    legacy_passengers: u32,
     /// Fraction de voyageur en cours d'embarquement.
     #[serde(default)]
     pub board_acc: f64,
@@ -145,24 +140,10 @@ impl Train {
     }
 }
 
-/// Accepte l'ancien format (un simple total) comme le nouveau (par catégorie).
-fn waiting_compat<'de, D: Deserializer<'de>>(d: D) -> Result<BTreeMap<String, f64>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Waiting {
-        Total(f64),
-        ByClass(BTreeMap<String, f64>),
-    }
-    Ok(match Waiting::deserialize(d)? {
-        Waiting::Total(n) => BTreeMap::from([(LEGACY_CLASS.to_string(), n)]),
-        Waiting::ByClass(map) => map,
-    })
-}
-
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct StationState {
     /// Voyageurs (ou tonnes) en attente, par catégorie de trafic.
-    #[serde(deserialize_with = "waiting_compat")]
+    #[serde(default)]
     pub waiting: BTreeMap<String, f64>,
 }
 
@@ -332,22 +313,17 @@ impl World {
 
     /// Aligne l'état sur les données (après un changement de mods ou de
     /// version) : ajoute ce qui manque, retire ce qui n'existe plus, et
-    /// convertit les sauvegardes de l'ancien format.
+    /// corrige les valeurs hors bornes.
     pub fn reconcile(&mut self, data: &GameData) {
         let b = &data.balance;
         let known = |id: &String| data.class(id).is_some();
-        let first_class = data.traffic.first().map(|c| c.id.clone());
         self.version = SAVE_VERSION;
 
         for s in data.stations() {
             self.stations.entry(s.id.clone()).or_default();
         }
         for station in self.stations.values_mut() {
-            let legacy = station.waiting.remove(LEGACY_CLASS).unwrap_or(0.0);
             station.waiting.retain(|id, _| known(id));
-            if let Some(first) = &first_class {
-                *station.waiting.entry(first.clone()).or_default() += legacy;
-            }
         }
 
         for l in data.lines() {
@@ -432,13 +408,7 @@ impl World {
             };
             t.pos_km = t.pos_km.clamp(0.0, line.length_km);
             t.load.retain(|id, _| known(id));
-            if t.legacy_passengers > 0 {
-                if let Some(first) = &first_class {
-                    *t.load.entry(first.clone()).or_default() += t.legacy_passengers;
-                }
-                t.legacy_passengers = 0;
-            }
-            // Champs absents des anciennes sauvegardes : on repart d'un horaire neutre.
+            // Horaire absent ou incohérent : on repart d'un horaire neutre.
             let dwell_s = self
                 .lines
                 .get(&t.line)
@@ -451,7 +421,7 @@ impl World {
                         t.sched_departure = self.clock + dwell_s;
                     }
                 }
-                // Train en route sans profil de marche (ancienne sauvegarde) : il
+                // Train en route sans profil de marche (sauvegarde incomplète) : il
                 // repart de sa position, pour la distance qui lui reste.
                 TrainState::Moving if t.trip.is_none() => {
                     match super::tick::plan_trip(
@@ -534,7 +504,6 @@ impl World {
             dir: Dir::Outbound,
             state: TrainState::AtStation { waited: 0.0 },
             load: BTreeMap::new(),
-            legacy_passengers: 0,
             board_acc: 0.0,
             sched_departure: self.clock + self.dwell_s(line),
             late_s: 0.0,
@@ -656,18 +625,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_1_saves_are_converted() {
+    fn a_minimal_save_is_completed_on_load() {
         let data = GameData::embedded().unwrap();
         let old = r#"{
             "version": 1, "clock": 40000.0, "money": 321.0, "lifetime_income": 900.0,
             "passengers_carried": 480,
-            "stations": {"stockton": {"waiting": 37.5}, "darlington": {"waiting": 4.0}},
+            "stations": {"stockton": {"waiting": {"commuter": 37.5, "inconnu": 3.0}},
+                         "darlington": {"waiting": {"commuter": 4.0}}},
             "lines": {"stockton_darlington": {"condition": 0.8}},
             "trains": [
                 {"id": 1, "loco": "locomotion_1", "line": "stockton_darlington", "pos_km": 9.5,
-                 "dir": "Outbound", "state": "Moving", "passengers": 31, "board_acc": 0.2},
+                 "dir": "Outbound", "state": "Moving", "load": {"commuter": 31}, "board_acc": 0.2},
                 {"id": 2, "loco": "locomotion_1", "line": "stockton_darlington", "pos_km": 19.0,
-                 "dir": "Inbound", "state": {"AtStation": {"waited": 120.0}}, "passengers": 5}
+                 "dir": "Inbound", "state": {"AtStation": {"waited": 120.0}}, "load": {"commuter": 5}}
             ],
             "next_train_id": 3, "research_done": ["hand_signals"], "research_active": null,
             "income_recent": 12.0
@@ -677,7 +647,11 @@ mod tests {
 
         assert_eq!(world.version, SAVE_VERSION);
         assert_eq!(world.stations["stockton"].waiting["commuter"], 37.5);
-        assert_eq!(world.stations["stockton"].total(), 37.5);
+        assert_eq!(
+            world.stations["stockton"].total(),
+            37.5,
+            "catégorie inconnue retirée"
+        );
         assert_eq!(world.trains[0].count(), 31);
         assert_eq!(world.trains[1].load["commuter"], 5);
         let line = &world.lines["stockton_darlington"];
@@ -701,9 +675,8 @@ mod tests {
         assert_eq!(world.satisfaction.len(), 4);
         assert_eq!(world.overall_satisfaction(&data), 0.5);
 
-        // Une fois convertie, la partie se sérialise et se relit à l'identique.
+        // Une fois complétée, la partie se sérialise et se relit à l'identique.
         let json = serde_json::to_string(&world).unwrap();
-        assert!(!json.contains("passengers\":31"));
         assert_eq!(serde_json::from_str::<World>(&json).unwrap(), world);
     }
 
