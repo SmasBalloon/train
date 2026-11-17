@@ -4,6 +4,7 @@ use crate::data::{
     Balance, Country, Era, GameData, GameEvent, Locomotive, StaffRole, Station, TrafficClass,
 };
 
+use super::crew::CrewRole;
 use super::kinematics::Profile;
 use super::modifiers::{LineProps, Modifiers};
 use super::world::{Dir, INCOME_TAU, LineState, Train, TrainState, Trip, World};
@@ -55,6 +56,14 @@ pub enum SimEvent {
         train: u32,
         loco: String,
         refund: f64,
+    },
+    /// Une session de formation s'est terminée : inscrits ayant progressé, et
+    /// ceux qui n'ont rien retenu.
+    TrainingDone {
+        role: CrewRole,
+        skill: usize,
+        passed: Vec<u32>,
+        failed: Vec<u32>,
     },
     /// La machine d'un train a été remplacée à son arrivée, comme prévu.
     TrainReplaced {
@@ -340,6 +349,15 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
     let era = world.era(data);
     world.clock += h;
     world.refresh_candidates(data);
+    for (session, outcome) in world.finish_trainings(data) {
+        let (passed, failed): (Vec<_>, Vec<_>) = outcome.into_iter().partition(|(_, ok)| *ok);
+        events.push(SimEvent::TrainingDone {
+            role: session.role,
+            skill: session.skill,
+            passed: passed.into_iter().map(|(id, _)| id).collect(),
+            failed: failed.into_iter().map(|(id, _)| id).collect(),
+        });
+    }
     world.sync_crew();
     let crew_fx = data.crew.effects;
     let mut driven: Vec<(u32, f64)> = Vec::new();
@@ -698,9 +716,11 @@ mod tests {
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
-        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        // Le conducteur d'essai, sans compétence, ne coûte rien : les comptes restent ronds.
         data.crew.base_wage = 0.0;
-        (World::new(&data), data)
+        let mut world = World::new(&data);
+        world.test_driver(1);
+        (world, data)
     }
 
     /// Durée du trajet complet de la Locomotion n°1 sur voie neuve, sans recherche.
@@ -732,7 +752,9 @@ mod tests {
 
     fn flat() -> (World, GameData) {
         let data = flat_data();
-        (World::new(&data), data)
+        let mut world = World::new(&data);
+        world.test_driver(1);
+        (world, data)
     }
 
     fn fill(world: &mut World, station: &str, class: &str, n: f64) {

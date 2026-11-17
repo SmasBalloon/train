@@ -9,7 +9,7 @@ mod tick;
 mod world;
 
 pub use actions::{ActionError, OrderOutcome, UnlockStatus};
-pub use crew::{CrewMember, CrewRole, TrainCrew};
+pub use crew::{CrewMember, CrewRole, Enrollment, TrainCrew, TrainingSession};
 pub use kinematics::Profile;
 pub use modifiers::{LineProps, Modifiers};
 pub use offline::{OFFLINE_STEP, OfflineReport, catch_up};

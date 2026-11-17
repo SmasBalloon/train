@@ -328,6 +328,10 @@ pub struct CrewRules {
     pub training_gain: f64,
     pub training_cost: f64,
     pub training_cost_growth: f64,
+    pub training_seats: u32,
+    pub training_fail_chance: f64,
+    pub training_delay_h: f64,
+    pub training_duration_h: f64,
     pub effects: CrewEffects,
     pub names: CrewNames,
 }

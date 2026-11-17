@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::data::{BonusKind, Era, GameData, Line};
 
-use super::crew::{CrewMember, TrainCrew};
+use super::crew::{CrewMember, TrainCrew, TrainingSession};
 use super::kinematics::Profile;
 use super::modifiers::Modifiers;
 
@@ -281,6 +281,14 @@ pub struct World {
     pub candidates_day: u64,
     #[serde(default)]
     pub next_crew_id: u32,
+    /// Conducteurs embauchés depuis la fondation (le premier est sans prime).
+    #[serde(default)]
+    pub drivers_hired: u32,
+    /// Sessions de formation à venir ou en cours.
+    #[serde(default)]
+    pub trainings: Vec<TrainingSession>,
+    #[serde(default)]
+    pub next_training_id: u32,
 }
 
 impl World {
@@ -313,11 +321,12 @@ impl World {
             candidates: Vec::new(),
             candidates_day: 0,
             next_crew_id: 0,
+            drivers_hired: 0,
+            trainings: Vec::new(),
+            next_training_id: 0,
         };
         world.reconcile(data);
-        let train = world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
-        // La machine de départ est livrée avec son mécanicien, débutant.
-        world.novice_driver(data, train);
+        world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
         world
     }
 
@@ -328,7 +337,6 @@ impl World {
         let b = &data.balance;
         let known = |id: &String| data.class(id).is_some();
         let first_class = data.traffic.first().map(|c| c.id.clone());
-        let loaded_version = self.version;
         self.version = SAVE_VERSION;
 
         for s in data.stations() {
@@ -480,17 +488,11 @@ impl World {
             *s = s.clamp(0.0, 1.0);
         }
         self.sync_crew();
-        // Avant la version 7, un train roulait sans conducteur : chacun en reçoit un.
-        if loaded_version < 7 {
-            let driverless: Vec<u32> = self
-                .trains
-                .iter()
-                .filter(|t| !t.crew.has_driver)
-                .map(|t| t.id)
-                .collect();
-            for train in driverless {
-                self.novice_driver(data, train);
-            }
+        // Formations : on oublie les inscrits disparus.
+        let ids: BTreeSet<u32> = self.crew.iter().map(|m| m.id).collect();
+        for t in &mut self.trainings {
+            t.skill = t.skill.min(2);
+            t.enrolled.retain(|e| ids.contains(&e.crew));
         }
         // Un remplacement vers une machine disparue des données est annulé et remboursé.
         let mut refund = 0.0;

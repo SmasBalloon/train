@@ -90,6 +90,19 @@ pub enum Popup {
     Fleet {
         sel: usize,
     },
+    /// Sessions de formation programmées.
+    Training {
+        sel: usize,
+    },
+    /// Choix de la formation à programmer, parmi les compétences des deux métiers.
+    TrainingNew {
+        sel: usize,
+    },
+    /// Inscriptions à une session : `sel` est le rang de l'équipier du métier concerné.
+    Enroll {
+        session: u32,
+        sel: usize,
+    },
     /// Remplacement de la machine d'un train : `sel` est le rang de la
     /// locomotive proposée, `fleet` le rang du train dans la flotte.
     Replace {
@@ -477,6 +490,31 @@ impl App {
                     LogKind::Info,
                 );
             }
+            SimEvent::TrainingDone {
+                role,
+                skill,
+                passed,
+                failed,
+            } => {
+                let names = |ids: &[u32]| {
+                    ids.iter()
+                        .filter_map(|id| self.world.crew_member(*id))
+                        .map(|m| m.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                let course = role.skills()[skill.min(2)].to_lowercase();
+                let (ok, ko) = (names(&passed), names(&failed));
+                if !ok.is_empty() {
+                    self.push_log(format!("Formation {course} réussie : {ok}"), LogKind::Good);
+                }
+                if !ko.is_empty() {
+                    self.push_log(
+                        format!("Formation {course} : {ko} n'a rien retenu"),
+                        LogKind::Warn,
+                    );
+                }
+            }
             SimEvent::TrainReplaced { train, old, new } => {
                 let name = |id: &str| {
                     self.data
@@ -679,22 +717,12 @@ impl App {
             Ok(train) => {
                 self.selected = Some(train);
                 self.popup = Popup::None;
-                match self
-                    .world
-                    .crew_on(train, CrewRole::Driver)
-                    .map(|m| m.name.clone())
-                {
-                    Some(driver) => self.push_log(
-                        format!("{name} : mise en service, {driver} est aux commandes"),
-                        LogKind::Good,
+                self.push_log(
+                    format!(
+                        "{name} : livrée à quai. Affecte-lui un conducteur (s) pour qu'elle roule"
                     ),
-                    None => self.push_log(
-                        format!(
-                            "{name} : livrée, mais il lui faut un conducteur (s pour recruter)"
-                        ),
-                        LogKind::Warn,
-                    ),
-                }
+                    LogKind::Warn,
+                );
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -853,33 +881,96 @@ impl App {
         }
     }
 
-    /// Paie une formation à l'équipier choisi, dans sa compétence `skill`.
-    fn train_skill(&mut self, sel: usize, skill: usize) {
-        let Some(member) = self.world.crew.get(sel) else {
+    /// Formations proposées : (métier, compétence) dans l'ordre affiché.
+    pub fn courses() -> [(CrewRole, usize); 6] {
+        [
+            (CrewRole::Driver, 0),
+            (CrewRole::Driver, 1),
+            (CrewRole::Driver, 2),
+            (CrewRole::Conductor, 0),
+            (CrewRole::Conductor, 1),
+            (CrewRole::Conductor, 2),
+        ]
+    }
+
+    /// Équipiers du métier d'une session, dans l'ordre de la liste des inscriptions.
+    pub fn enroll_candidates(&self, session: u32) -> Vec<&crate::sim::CrewMember> {
+        let Some(t) = self.world.training(session) else {
+            return Vec::new();
+        };
+        self.world
+            .crew
+            .iter()
+            .filter(|m| m.role == t.role)
+            .collect()
+    }
+
+    fn schedule_training(&mut self, sel: usize) {
+        let Some(&(role, skill)) = Self::courses().get(sel) else {
             return;
         };
-        let (id, name, label) = (
-            member.id,
-            member.name.clone(),
-            member.role.skills()[skill.min(2)],
-        );
-        match self.world.train_crew_skill(&self.data, id, skill) {
-            Ok(cost) => {
-                self.popup_msg = None;
+        match self.world.schedule_training(&self.data, role, skill) {
+            Ok(id) => {
+                self.open(Popup::Enroll {
+                    session: id,
+                    sel: 0,
+                });
                 self.push_log(
                     format!(
-                        "{name} suit une formation : {} ({})",
-                        label.to_lowercase(),
-                        format::money(cost)
+                        "Formation programmée : {} ({}), dans {} h. Inscris des équipiers.",
+                        role.skills()[skill].to_lowercase(),
+                        role.name().to_lowercase(),
+                        format::quantity(self.data.crew.training_delay_h)
                     ),
-                    LogKind::Good,
+                    LogKind::Info,
                 );
             }
-            Err(crate::sim::ActionError::MaxLevel) => {
-                self.popup_msg = Some(format!(
-                    "{name} maîtrise déjà parfaitement : {}",
-                    label.to_lowercase()
-                ));
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    fn cancel_training(&mut self, sel: usize) {
+        let Some(id) = self.world.trainings.get(sel).map(|t| t.id) else {
+            return;
+        };
+        match self.world.cancel_training(id) {
+            Ok(refund) => {
+                let left = self.world.trainings.len();
+                self.open(Popup::Training {
+                    sel: sel.min(left.saturating_sub(1)),
+                });
+                self.push_log(
+                    format!("Formation annulée, {} remboursés", format::money(refund)),
+                    LogKind::Info,
+                );
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Inscrit l'équipier choisi, ou le désinscrit s'il l'était déjà.
+    fn toggle_enrollment(&mut self, session: u32, sel: usize) {
+        let Some((id, name)) = self
+            .enroll_candidates(session)
+            .get(sel)
+            .map(|m| (m.id, m.name.clone()))
+        else {
+            return;
+        };
+        let enrolled = self.world.training(session).is_some_and(|t| t.has(id));
+        let result = if enrolled {
+            self.world
+                .unenroll(session, id)
+                .map(|r| format!("{name} désinscrit ({} remboursés)", format::money(r)))
+        } else {
+            self.world
+                .enroll(&self.data, session, id)
+                .map(|c| format!("{name} inscrit à la formation ({})", format::money(c)))
+        };
+        match result {
+            Ok(text) => {
+                self.popup_msg = None;
+                self.push_log(text, LogKind::Info);
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -900,34 +991,14 @@ impl App {
                     };
                     let name = name.unwrap_or_default();
                     self.push_log(format!("{name} rejoint la compagnie"), LogKind::Good);
-                    // Un nouveau conducteur prend d'office un train qui n'en a pas,
-                    // de préférence celui sélectionné sur la carte.
                     let is_driver = self
                         .world
                         .crew_member(id)
                         .is_some_and(|m| m.role == CrewRole::Driver);
-                    let idle = self
-                        .selected
-                        .filter(|t| self.world.train(*t).is_some_and(|t| !t.crew.has_driver))
-                        .or_else(|| {
-                            self.world
-                                .trains
-                                .iter()
-                                .find(|t| !t.crew.has_driver)
-                                .map(|t| t.id)
-                        });
-                    if is_driver
-                        && let Some(train) = idle
-                        && self.world.assign_crew(id, Some(train)).is_ok()
-                    {
-                        let train_name = self
-                            .world
-                            .train(train)
-                            .map(|t| self.train_name(t))
-                            .unwrap_or_default();
+                    if is_driver {
                         self.push_log(
-                            format!("{name} prend les commandes de {train_name}"),
-                            LogKind::Good,
+                            format!("{name} attend son affectation : Tab, puis Entrée sur le train sélectionné"),
+                            LogKind::Info,
                         );
                     }
                 }
@@ -1330,10 +1401,8 @@ impl App {
                     });
                 } else if code == KeyCode::Char('x') && !recruiting {
                     self.dismiss_crew(sel);
-                } else if let KeyCode::Char(c @ '1'..='3') = code
-                    && !recruiting
-                {
-                    self.train_skill(sel, c as usize - '1' as usize);
+                } else if code == KeyCode::Char('f') {
+                    self.open(Popup::Training { sel: 0 });
                 } else if closes || code == KeyCode::Char('s') {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, count) {
@@ -1368,6 +1437,54 @@ impl App {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, self.world.trains.len()) {
                     self.open(Popup::Fleet { sel });
+                }
+            }
+            Popup::Training { sel } => {
+                if confirms {
+                    if let Some(id) = self.world.trainings.get(sel).map(|t| t.id) {
+                        self.open(Popup::Enroll {
+                            session: id,
+                            sel: 0,
+                        });
+                    }
+                } else if code == KeyCode::Char('n') {
+                    self.open(Popup::TrainingNew { sel: 0 });
+                } else if code == KeyCode::Char('x') {
+                    self.cancel_training(sel);
+                } else if closes || code == KeyCode::Char('i') {
+                    self.popup = Popup::None;
+                } else if let Some(sel) = move_selection(code, sel, self.world.trainings.len()) {
+                    self.open(Popup::Training { sel });
+                }
+            }
+            Popup::TrainingNew { sel } => {
+                if confirms {
+                    self.schedule_training(sel);
+                } else if closes {
+                    self.open(Popup::Training { sel: 0 });
+                } else if let Some(sel) = move_selection(code, sel, Self::courses().len()) {
+                    self.open(Popup::TrainingNew { sel });
+                }
+            }
+            Popup::Enroll { session, sel } => {
+                let back = || {
+                    let sel = self
+                        .world
+                        .trainings
+                        .iter()
+                        .position(|t| t.id == session)
+                        .unwrap_or(0);
+                    Popup::Training { sel }
+                };
+                if self.world.training(session).is_none() || closes {
+                    let popup = back();
+                    self.open(popup);
+                } else if confirms {
+                    self.toggle_enrollment(session, sel);
+                } else if let Some(sel) =
+                    move_selection(code, sel, self.enroll_candidates(session).len())
+                {
+                    self.open(Popup::Enroll { session, sel });
                 }
             }
             Popup::Replace { train, fleet, sel } => {
@@ -1421,6 +1538,7 @@ impl App {
                     | 'g'
                     | 'o'
                     | 's'
+                    | 'i'
             ) | KeyCode::Enter
         );
         if acts && !self.can_act() {
@@ -1450,6 +1568,7 @@ impl App {
                 let recruiting = self.world.crew.is_empty();
                 self.open(Popup::Crew { sel: 0, recruiting });
             }
+            KeyCode::Char('i') => self.open(Popup::Training { sel: 0 }),
             KeyCode::Char('v') => {
                 let sel = self
                     .selected

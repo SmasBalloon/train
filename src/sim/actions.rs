@@ -7,7 +7,6 @@ use crate::data::{
     Upgrade,
 };
 
-use super::crew::CrewRole;
 use super::tick::{plan_trip, station_capacity, water_wait_s};
 use super::world::{ActiveResearch, TrainOrder, TrainState, World};
 
@@ -63,6 +62,15 @@ pub enum ActionError {
     NoDriver,
     /// Le train est déjà tiré par cette machine.
     SameLocomotive,
+    UnknownTraining,
+    /// Les inscriptions sont closes : la session a commencé.
+    TrainingStarted,
+    /// Toutes les places de la session sont prises.
+    TrainingFull,
+    /// La session s'adresse à l'autre métier.
+    WrongRole,
+    /// L'équipier est déjà inscrit à une session.
+    AlreadyEnrolled,
 }
 
 /// Issue d'une vente ou d'un remplacement : fait sur-le-champ (montant
@@ -128,9 +136,19 @@ impl fmt::Display for ActionError {
             }
             ActionError::LineNotBuilt => write!(f, "Cette ligne n'est pas encore construite"),
             ActionError::NoDriver => {
-                write!(f, "Ce train n'a pas de conducteur : recrutes-en un (s)")
+                write!(
+                    f,
+                    "Ce train n'a pas de conducteur affecté (s : recruter et affecter)"
+                )
             }
             ActionError::SameLocomotive => write!(f, "Ce train est déjà tiré par cette machine"),
+            ActionError::UnknownTraining => write!(f, "Formation inconnue"),
+            ActionError::TrainingStarted => {
+                write!(f, "La formation a commencé : inscriptions closes")
+            }
+            ActionError::TrainingFull => write!(f, "Formation complète"),
+            ActionError::WrongRole => write!(f, "Cette formation s'adresse à l'autre métier"),
+            ActionError::AlreadyEnrolled => write!(f, "Déjà inscrit à une formation"),
         }
     }
 }
@@ -254,12 +272,7 @@ impl World {
             return Err(blocker);
         }
         self.pay(loco.cost)?;
-        let train = self.spawn_train(loco_id, line_id);
-        // Un conducteur en réserve prend aussitôt la nouvelle machine.
-        if let Some(driver) = self.reserve(CrewRole::Driver).map(|m| m.id) {
-            let _ = self.assign_crew(driver, Some(train));
-        }
-        Ok(train)
+        Ok(self.spawn_train(loco_id, line_id))
     }
 
     /// Somme récupérée en revendant une machine.
@@ -944,16 +957,18 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::{SimEvent, advance};
+    use crate::sim::{CrewRole, SimEvent, advance};
 
     const LINE: &str = "stockton_darlington";
 
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
-        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        // Le conducteur d'essai, sans compétence, ne coûte rien : les comptes restent ronds.
         data.crew.base_wage = 0.0;
-        (World::new(&data), data)
+        let mut world = World::new(&data);
+        world.test_driver(1);
+        (world, data)
     }
 
     fn enter(world: &mut World, era: &str) {
@@ -1155,14 +1170,18 @@ mod tests {
         world.assign_crew(driver, None).unwrap();
         assert_eq!(world.dispatch(&data, 1), Err(ActionError::NoDriver));
         assert_eq!(world.dispatch_all(&data), 0);
-        // Une machine achetée prend le conducteur en réserve.
+        // Ni les départs automatiques : le train reste à quai.
+        world.research_done.insert("hand_signals".into());
+        advance(&mut world, &data, 6.0 * 3600.0);
+        assert!(world.trains[0].is_docked() && world.trips == 0);
+        // Une machine achetée n'a personne aux commandes tant qu'on ne l'affecte pas,
+        // même avec un conducteur en réserve.
         world.money = 1000.0;
         let id = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
-        assert_eq!(world.crew_on(id, CrewRole::Driver).unwrap().id, driver);
+        assert!(world.crew_on(id, CrewRole::Driver).is_none());
+        assert_eq!(world.dispatch(&data, id), Err(ActionError::NoDriver));
+        world.assign_crew(driver, Some(id)).unwrap();
         assert!(world.dispatch(&data, id).is_ok());
-        // La suivante attend qu'on lui en trouve un.
-        let other = world.buy_locomotive(&data, "locomotion_1", LINE).unwrap();
-        assert_eq!(world.dispatch(&data, other), Err(ActionError::NoDriver));
     }
 
     #[test]

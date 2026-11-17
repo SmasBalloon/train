@@ -1,7 +1,8 @@
 # Équipages : conducteurs et contrôleurs affectés aux trains.
 #
-# Un train ne part pas sans conducteur ; sans contrôleur désigné, il roule avec
-# du personnel ordinaire, sans bonus.
+# Un train ne part pas sans un conducteur recruté et affecté ; sans contrôleur
+# désigné, il roule avec du personnel ordinaire, sans bonus. La prime du tout
+# premier conducteur est offerte.
 # Chaque compétence va de 0 à 1 (affichée sur cinq étoiles) et progresse avec
 # les kilomètres parcourus.
 
@@ -11,11 +12,17 @@ skill_wage         = 9.0    # supplément horaire pour un équipier parfait
 hire_fee_hours     = 24.0   # prime d'embauche, en heures de salaire
 xp_per_km          = 0.00002  # part du chemin vers la perfection gagnée par km parcouru
 
-# Formations payantes : chacune fait gagner `training_gain` dans une compétence.
-# Prix (première époque) : training_cost × (1 + training_cost_growth × niveau²).
-training_gain        = 0.10
-training_cost        = 60.0
-training_cost_growth = 6.0
+# Formations : on programme une session (un métier, une compétence), puis on y
+# inscrit des équipiers. Ils sont absents pendant la session : un conducteur en
+# formation laisse son train à quai. Prix par inscrit (première époque) :
+# training_cost × (1 + training_cost_growth × niveau²).
+training_gain         = 0.10   # progression dans la compétence travaillée
+training_cost         = 60.0
+training_cost_growth  = 6.0
+training_seats        = 5      # inscrits au plus par session
+training_fail_chance  = 0.10   # risque de ne rien retenir
+training_delay_h      = 6.0    # délai entre la programmation et le début, en heures de jeu
+training_duration_h   = 8.0    # durée d'une session, en heures de jeu
 
 # Effet d'une compétence au maximum (un équipier à moitié compétent en donne la moitié).
 [effects]

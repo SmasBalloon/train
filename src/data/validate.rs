@@ -392,6 +392,13 @@ impl GameData {
         if !(c.training_gain > 0.0 && c.training_gain <= 1.0) {
             bail!("crew : training_gain doit être compris entre 0 (exclu) et 1");
         }
+        ratio("crew : training_fail_chance", c.training_fail_chance)?;
+        non_negative("crew : training_delay_h", c.training_delay_h)?;
+        if c.training_seats == 0
+            || c.training_duration_h.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
+        {
+            bail!("crew : une formation doit avoir au moins une place et durer");
+        }
         let e = &c.effects;
         for (name, v) in [
             ("driving_accel", e.driving_accel),

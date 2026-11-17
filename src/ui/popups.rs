@@ -31,6 +31,9 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::Crew { sel, recruiting } => draw_crew(app, buf, area, sel, recruiting),
         Popup::Fleet { sel } => draw_fleet(app, buf, area, sel),
         Popup::Replace { train, sel, .. } => draw_replace(app, buf, area, train, sel),
+        Popup::Training { sel } => draw_training(app, buf, area, sel),
+        Popup::TrainingNew { sel } => draw_training_new(app, buf, area, sel),
+        Popup::Enroll { session, sel } => draw_enroll(app, buf, area, session, sel),
         Popup::Event { sel } => draw_event(app, buf, area, sel),
         Popup::Outcome { event, choice } => draw_outcome(app, buf, area, event, choice),
         Popup::Welcome => draw_welcome(app, buf, area),
@@ -1381,11 +1384,19 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         .enumerate()
         .map(|(i, m)| {
             let post = if recruiting {
-                format!("prime {}", format::money(app.world.hire_fee(&app.data, m)))
+                match app.world.hire_fee(&app.data, m) {
+                    fee if fee > 0.0 => format!("prime {}", format::money(fee)),
+                    _ => "prime offerte".to_string(),
+                }
             } else {
-                match m.train.and_then(|id| app.world.train(id)) {
+                let post = match m.train.and_then(|id| app.world.train(id)) {
                     Some(train) => app.train_name(train),
                     None => "en réserve".to_string(),
+                };
+                if app.world.in_training(m.id) {
+                    format!("{post} (en formation)")
+                } else {
+                    post
                 }
             };
             let text = format!(
@@ -1466,27 +1477,24 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
             ]));
         }
         if !recruiting {
-            let costs: Vec<String> = (0..3)
-                .map(|i| {
-                    let name = m.role.skills()[i].to_lowercase();
-                    match app.world.training_cost(&app.data, m, i) {
-                        Some(cost) => format!("{} {name} {}", i + 1, format::money(cost)),
-                        None => format!("{} {name} parfait", i + 1),
-                    }
-                })
-                .collect();
-            lines.push(Line::styled(
-                format!(
-                    "Formations (+{} chacune) : {}",
-                    format::percent(rules.training_gain),
-                    costs.join(&format!(" {} ", g.bullet))
+            let status = match app.world.enrolled_in(m.id) {
+                Some(session) if session.started(app.world.clock) => format!(
+                    "En formation ({}) jusqu'à {} : absent de son train.",
+                    session.skill_name().to_lowercase(),
+                    when(session.end)
                 ),
-                t.text,
-            ));
+                Some(session) => format!(
+                    "Inscrit à la formation {} qui commence {}.",
+                    session.skill_name().to_lowercase(),
+                    when(session.start)
+                ),
+                None => "Aucune formation prévue : f pour en programmer une.".to_string(),
+            };
+            lines.push(Line::styled(status, t.text));
         }
         lines.push(Line::raw(""));
         lines.push(Line::styled(
-            "Les compétences progressent avec les kilomètres parcourus en service, ou d'un coup avec une formation payante ; un équipier en réserve est payé mais n'apprend rien. Un train ne part jamais sans conducteur.",
+            "Les compétences progressent avec les kilomètres parcourus en service, ou avec une formation ; un équipier en réserve est payé mais n'apprend rien. Un train ne part pas sans un conducteur affecté.",
             t.dim,
         ));
         if !recruiting {
@@ -1512,8 +1520,237 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         if recruiting {
             "Entrée : embaucher    Tab : employés    haut/bas : choisir    Échap : fermer"
         } else {
-            "Entrée : affecter au train sélectionné (ou réserve)    1/2/3 : formation    x : licencier    Tab : recrutement    Échap : fermer"
+            "Entrée : affecter au train sélectionné (ou réserve)    f : formations    x : licencier    Tab : recrutement    Échap : fermer"
         },
+    );
+}
+
+// ──────────────────────────── Formations ───────────────────────────
+
+/// Jour et heure de jeu d'une valeur de l'horloge.
+fn when(clock: f64) -> String {
+    let (h, m) = crate::sim::hour_minute(clock);
+    format!("jour {} à {h:02}h{m:02}", (clock / 86_400.0) as u64 + 1)
+}
+
+fn draw_training(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
+    let t = &app.theme;
+    let rules = &app.data.crew;
+    let sessions = &app.world.trainings;
+    let [list, detail, foot] = panel(
+        app,
+        buf,
+        area,
+        "Formations des équipages",
+        sessions.len().max(1),
+        (104, 28),
+    );
+    let clock = app.world.clock;
+    let rows: Vec<Line> = sessions
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let (state, style) = if s.started(clock) {
+                (format!("en cours, fin {}", when(s.end)), t.good)
+            } else {
+                (format!("début {}", when(s.start)), t.text)
+            };
+            let text = format!(
+                "{} {:<14} {:<12} {}/{} inscrits   ",
+                cursor(app, i == sel),
+                s.skill_name(),
+                s.role.name(),
+                s.enrolled.len(),
+                rules.training_seats,
+            );
+            Line::from(vec![
+                Span::styled(text, row_style(app, i == sel)),
+                Span::styled(state, style),
+            ])
+        })
+        .collect();
+    if rows.is_empty() {
+        Paragraph::new(Line::styled(
+            "Aucune formation programmée : n pour en programmer une.",
+            t.dim,
+        ))
+        .render(list, buf);
+    } else {
+        render_list(buf, list, rows, sel);
+    }
+
+    let mut lines = Vec::new();
+    if let Some(s) = sessions.get(sel) {
+        let names: Vec<String> = s
+            .enrolled
+            .iter()
+            .filter_map(|e| app.world.crew_member(e.crew))
+            .map(|m| m.name.clone())
+            .collect();
+        lines.push(Line::styled(
+            format!(
+                "{} {} {}",
+                s.skill_name(),
+                app.glyphs.dash,
+                s.role.name().to_lowercase()
+            ),
+            t.title,
+        ));
+        lines.push(Line::styled(
+            if names.is_empty() {
+                "Personne n'est encore inscrit.".to_string()
+            } else {
+                format!("Inscrits : {}", names.join(", "))
+            },
+            t.text,
+        ));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(
+        format!(
+            "Une session dure {} h et accueille {} équipiers au plus. Chacun gagne +{} dans la compétence travaillée, sauf malchance ({} de risque de ne rien retenir). Les inscrits sont absents pendant la session : un conducteur en formation laisse son train à quai.",
+            format::quantity(rules.training_duration_h),
+            rules.training_seats,
+            format::percent(rules.training_gain),
+            format::percent(rules.training_fail_chance),
+        ),
+        t.dim,
+    ));
+    Paragraph::new(lines)
+        .wrap(Wrap { trim: true })
+        .render(detail, buf);
+    footer(
+        app,
+        buf,
+        foot,
+        "n : programmer    Entrée : inscriptions    x : annuler (remboursé)    Échap : fermer",
+    );
+}
+
+fn draw_training_new(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
+    let t = &app.theme;
+    let courses = App::courses();
+    let [list, detail, foot] = panel(
+        app,
+        buf,
+        area,
+        "Programmer une formation",
+        courses.len(),
+        (80, 18),
+    );
+    let rows: Vec<Line> = courses
+        .iter()
+        .enumerate()
+        .map(|(i, (role, skill))| {
+            Line::styled(
+                format!(
+                    "{} {:<14} {}",
+                    cursor(app, i == sel),
+                    role.skills()[*skill],
+                    role.name().to_lowercase()
+                ),
+                row_style(app, i == sel),
+            )
+        })
+        .collect();
+    render_list(buf, list, rows, sel);
+    Paragraph::new(Line::styled(
+        format!(
+            "La session commencera dans {} h : d'ici là, inscris jusqu'à {} équipiers du métier.",
+            format::quantity(app.data.crew.training_delay_h),
+            app.data.crew.training_seats
+        ),
+        t.dim,
+    ))
+    .wrap(Wrap { trim: true })
+    .render(detail, buf);
+    footer(app, buf, foot, "Entrée : programmer    Échap : retour");
+}
+
+fn draw_enroll(app: &App, buf: &mut Buffer, area: Rect, session: u32, sel: usize) {
+    let t = &app.theme;
+    let Some(s) = app.world.training(session) else {
+        return;
+    };
+    let members = app.enroll_candidates(session);
+    let title = format!(
+        "Inscriptions : {} ({}) {}/{}",
+        s.skill_name(),
+        s.role.name().to_lowercase(),
+        s.enrolled.len(),
+        app.data.crew.training_seats
+    );
+    let [list, detail, foot] = panel(app, buf, area, &title, members.len().max(1), (96, 26));
+    let rows: Vec<Line> = members
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let (status, style) = if s.has(m.id) {
+                ("inscrit".to_string(), t.good)
+            } else {
+                match app.world.enroll_blocker(&app.data, session, m.id) {
+                    Some(ActionError::MaxLevel) => ("déjà parfait".to_string(), t.dim),
+                    Some(ActionError::AlreadyEnrolled) => ("autre formation".to_string(), t.dim),
+                    Some(ActionError::TrainingFull) => ("complet".to_string(), t.dim),
+                    Some(ActionError::TrainingStarted) => {
+                        ("inscriptions closes".to_string(), t.dim)
+                    }
+                    Some(_) => ("indisponible".to_string(), t.dim),
+                    None => {
+                        let cost = app
+                            .world
+                            .training_cost(&app.data, m, s.skill)
+                            .unwrap_or(0.0);
+                        let style = if app.world.money < cost {
+                            t.dim
+                        } else {
+                            t.text
+                        };
+                        (format::money(cost), style)
+                    }
+                }
+            };
+            let text = format!(
+                "{} {:<22} {}  {:>4}   ",
+                cursor(app, i == sel),
+                m.name,
+                stars(app, m.skills[s.skill]),
+                format::percent(m.skills[s.skill]),
+            );
+            Line::from(vec![
+                Span::styled(text, row_style(app, i == sel)),
+                Span::styled(status, style),
+            ])
+        })
+        .collect();
+    if rows.is_empty() {
+        Paragraph::new(Line::styled(
+            format!(
+                "Aucun {} employé : recrute-en d'abord (s).",
+                s.role.name().to_lowercase()
+            ),
+            t.warn,
+        ))
+        .render(list, buf);
+    } else {
+        render_list(buf, list, rows, sel);
+    }
+    let text = if s.started(app.world.clock) {
+        format!("Session en cours jusqu'à {}.", when(s.end))
+    } else {
+        format!(
+            "Début {}. On peut se désinscrire (remboursé) jusque-là.",
+            when(s.start)
+        )
+    };
+    Paragraph::new(Line::styled(text, t.dim))
+        .wrap(Wrap { trim: true })
+        .render(detail, buf);
+    footer(
+        app,
+        buf,
+        foot,
+        "Entrée : inscrire / désinscrire    haut/bas : choisir    Échap : retour",
     );
 }
 

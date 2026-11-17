@@ -171,7 +171,9 @@ mod tests {
 
     fn app(ascii: bool, color: ColorMode) -> App {
         let data = GameData::embedded().unwrap();
-        App::new(World::new(&data), data, UiOptions { ascii, color })
+        let mut world = World::new(&data);
+        world.test_driver(1);
+        App::new(world, data, UiOptions { ascii, color })
     }
 
     fn screen(app: &mut App, width: u16, height: u16) -> String {
@@ -425,19 +427,21 @@ mod tests {
 
     #[test]
     fn crew_popup_recruits_and_assigns() {
-        let mut app = app(false, ColorMode::Color);
+        let data = GameData::embedded().unwrap();
+        let mut app = App::new(
+            World::new(&data),
+            data,
+            UiOptions {
+                ascii: false,
+                color: ColorMode::Color,
+            },
+        );
         app.update(0.1);
-        // La machine de départ arrive avec son conducteur débutant.
-        let founder = app
-            .world
-            .crew_on(1, crate::sim::CrewRole::Driver)
-            .unwrap()
-            .name
-            .clone();
-        app.world.crew.clear();
-        app.update(0.1);
-        assert!(!app.world.trains[0].crew.has_driver);
+        // Nouvelle partie : personne aux commandes, le train reste à quai.
+        assert!(app.world.crew.is_empty() && !app.world.trains[0].crew.has_driver);
         assert!(screen(&mut app, 130, 44).contains("SANS CONDUCTEUR"));
+        press(&mut app, KeyCode::Char('d'));
+        assert!(app.world.trains[0].is_docked());
         press(&mut app, KeyCode::Char('s'));
         // Personne n'est employé : la fenêtre s'ouvre sur le recrutement.
         assert_eq!(
@@ -454,6 +458,7 @@ mod tests {
             "Contrôleur",
             "Conduite",
             "Douceur",
+            "prime offerte",
             "prime £",
             "★",
         ] {
@@ -462,52 +467,38 @@ mod tests {
                 "« {expected} » absent de :\n{text}"
             );
         }
+        // Le premier conducteur s'embauche sans prime, même sans le sou.
         app.world.money = 0.0;
-        press(&mut app, KeyCode::Enter);
-        assert!(screen(&mut app, 130, 44).contains("Pas assez d'argent"));
-
-        app.world.money = 5000.0;
         let driver = app.world.candidates[0].name.clone();
-        assert_ne!(driver, founder);
         press(&mut app, KeyCode::Enter);
         assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 3));
-        // Le nouveau conducteur prend d'office le train qui n'en avait pas.
-        assert_eq!(app.world.crew[0].train, Some(1));
-        assert!(app.world.trains[0].crew.has_driver);
-        // Le suivant de la liste est un contrôleur.
+        // Recruté, mais pas encore affecté : toujours à quai.
+        assert_eq!(app.world.crew[0].train, None);
+        assert!(!app.world.trains[0].crew.has_driver);
+        // Le suivant de la liste est un contrôleur, payant.
         assert_eq!(
             app.world.candidates[0].role,
             crate::sim::CrewRole::Conductor
         );
         press(&mut app, KeyCode::Enter);
+        assert!(screen(&mut app, 130, 44).contains("Pas assez d'argent"));
+        app.world.money = 5000.0;
+        press(&mut app, KeyCode::Enter);
         assert_eq!(app.world.crew.len(), 2);
-        assert_eq!(
-            app.world.crew[1].train, None,
-            "un contrôleur attend son affectation"
-        );
 
         // Onglet des employés : Entrée affecte au train sélectionné, une seconde fois renvoie en réserve.
         press(&mut app, KeyCode::Tab);
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("Employés 2")
-                && text.contains("en réserve")
-                && text.contains(&driver)
-                && text.contains("Formations"),
+            text.contains("Employés 2") && text.contains("en réserve") && text.contains(&driver),
             "{text}"
         );
+        press(&mut app, KeyCode::Enter);
+        assert!(app.world.trains[0].crew.has_driver);
         press(&mut app, KeyCode::Down);
         press(&mut app, KeyCode::Enter);
         assert!(app.world.crew.iter().all(|m| m.train == Some(1)));
-        assert!(app.world.trains[0].crew.service() > 0.0);
         assert!(screen(&mut app, 130, 44).contains("Locomotion n°1 #1"));
-
-        // Formation : la compétence choisie progresse, contre paiement.
-        let (before, money) = (app.world.crew[1].skills[0], app.world.money);
-        press(&mut app, KeyCode::Char('1'));
-        assert!((app.world.crew[1].skills[0] - (before + 0.1).min(1.0)).abs() < 1e-9);
-        assert!(app.world.money < money);
-
         press(&mut app, KeyCode::Enter);
         assert_eq!(app.world.crew[1].train, None);
 
@@ -520,6 +511,52 @@ mod tests {
             text.contains(&format!("Équipage : {driver}")) && text.contains("contrôleur ordinaire"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn training_popup_schedules_and_enrolls() {
+        let mut app = app(false, ColorMode::Color);
+        app.update(0.1);
+        app.world.money = 1e6;
+        press(&mut app, KeyCode::Char('i'));
+        assert!(screen(&mut app, 130, 44).contains("Aucune formation programmée"));
+        // n : choisir la formation ; Entrée la programme et ouvre les inscriptions.
+        press(&mut app, KeyCode::Char('n'));
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("Programmer une formation") && text.contains("Embarquement"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.trainings.len(), 1);
+        let session = app.world.trainings[0].id;
+        assert_eq!(app.popup, app::Popup::Enroll { session, sel: 0 });
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("Inscriptions : Conduite") && text.contains("0/5"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.trainings[0].enrolled.len(), 1);
+        assert!(screen(&mut app, 130, 44).contains("inscrit"));
+        // Une seconde fois : désinscrit et remboursé.
+        let money = app.world.money;
+        press(&mut app, KeyCode::Enter);
+        assert!(app.world.trainings[0].enrolled.is_empty() && app.world.money > money);
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.popup, app::Popup::Training { sel: 0 });
+        assert!(screen(&mut app, 130, 44).contains("1/5 inscrits"));
+        // La fiche de l'équipier rappelle sa formation ; f y mène aussi.
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Char('s'));
+        assert!(screen(&mut app, 130, 44).contains("Inscrit à la formation conduite"));
+        press(&mut app, KeyCode::Char('f'));
+        assert_eq!(app.popup, app::Popup::Training { sel: 0 });
+        // x annule la session et rembourse.
+        let money = app.world.money;
+        press(&mut app, KeyCode::Char('x'));
+        assert!(app.world.trainings.is_empty() && app.world.money > money);
     }
 
     #[test]
@@ -1198,6 +1235,7 @@ mod tests {
     fn status_line_is_short_and_ascii_safe() {
         let data = GameData::embedded().unwrap();
         let mut world = World::new(&data);
+        world.test_driver(1);
         world.money = 1240.7;
         assert_eq!(
             status_line(&world, &data, false),

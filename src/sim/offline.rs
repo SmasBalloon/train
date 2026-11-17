@@ -75,6 +75,7 @@ pub fn catch_up(world: &mut World, data: &GameData, away_s: f64) -> OfflineRepor
                 | SimEvent::Repaired { .. }
                 | SimEvent::FuelBought { .. }
                 | SimEvent::TrainSold { .. }
+                | SimEvent::TrainingDone { .. }
                 | SimEvent::TrainReplaced { .. } => {}
             }
         }
@@ -95,9 +96,11 @@ mod tests {
     fn setup() -> (World, GameData) {
         let mut data = GameData::embedded().unwrap();
         data.events.clear();
-        // Le conducteur fondateur, débutant, ne coûte rien : les comptes restent ronds.
+        // Le conducteur d'essai, sans compétence, ne coûte rien : les comptes restent ronds.
         data.crew.base_wage = 0.0;
-        (World::new(&data), data)
+        let mut world = World::new(&data);
+        world.test_driver(1);
+        (world, data)
     }
 
     #[test]
@@ -152,6 +155,7 @@ mod tests {
     fn empty_coal_stock_and_pending_events_are_reported() {
         let data = GameData::embedded().unwrap();
         let mut world = World::new(&data);
+        world.test_driver(1);
         world.research_done.insert("hand_signals".into());
         world.era = "steam".into();
         world.fuel.insert("coal".into(), 1.0);

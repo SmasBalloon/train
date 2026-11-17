@@ -197,6 +197,7 @@ mod tests {
         let dir = temp_dir("offline");
         let data = GameData::embedded().unwrap();
         let mut world = World::new(&data);
+        world.test_driver(1);
         world.research_done.insert("hand_signals".into());
         save(&dir, &world).unwrap();
 
