@@ -7,12 +7,11 @@ description = "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825
 license-file = "LICENSE"
 default-run = "rail"
 repository = "https://github.com/SmasBalloon/train"
-homepage = "https://github.com/SmasBalloon/train"
 readme = "README.md"
 keywords = ["game", "terminal", "tui", "railway", "incremental"]
 categories = ["games", "command-line-utilities"]
-# Chaînes de `if let … && …` : stables depuis Rust 1.88.
-rust-version = "1.88"
+# `File::try_lock` (verrou de la sauvegarde) : stable depuis Rust 1.89.
+rust-version = "1.89"
 # Ce qui ne sert qu'au développement ne part pas dans le paquet.
 exclude = [".github/", ".gitattributes", "CONTRIBUTING.md"]
 
