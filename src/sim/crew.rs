@@ -167,13 +167,36 @@ impl World {
 
     /// Numéro de l'arrivage de candidats en cours (le premier vaut 1).
     pub fn candidates_batch_now(&self, data: &GameData) -> u64 {
-        (self.clock.max(0.0) / Self::candidates_period(data)) as u64 + 1
+        (self.candidates_elapsed() / Self::candidates_period(data)) as u64 + 1
+    }
+
+    /// Secondes de jeu écoulées depuis le point de départ des arrivages.
+    fn candidates_elapsed(&self) -> f64 {
+        (self.clock - self.candidates_anchor).max(0.0)
     }
 
     /// Secondes réelles avant le prochain arrivage de candidats.
     pub fn next_candidates_in(&self, data: &GameData) -> f64 {
         let period = Self::candidates_period(data);
-        (period - self.clock.max(0.0).rem_euclid(period)) / data.balance.time_scale
+        (period - self.candidates_elapsed().rem_euclid(period)) / data.balance.time_scale
+    }
+
+    /// Prix pour faire venir de nouveaux candidats sans attendre : une part
+    /// de la trésorerie actuelle.
+    pub fn candidates_reroll_cost(&self, data: &GameData) -> f64 {
+        self.money.max(0.0) * data.crew.candidates_reroll_share
+    }
+
+    /// Paie pour renouveler aussitôt les candidats ; le compte à rebours du
+    /// prochain arrivage repart de zéro. Renvoie la dépense.
+    pub fn reroll_candidates(&mut self, data: &GameData) -> Result<f64, ActionError> {
+        let cost = self.candidates_reroll_cost(data);
+        self.pay(cost)?;
+        self.candidates_anchor = self.clock;
+        self.candidates_rerolls = self.candidates_rerolls.wrapping_add(1);
+        self.candidates_batch = 0;
+        self.refresh_candidates(data);
+        Ok(cost)
     }
 
     /// Renouvelle la liste des candidats à chaque nouvel arrivage.
@@ -183,8 +206,9 @@ impl World {
             return;
         }
         self.candidates_batch = batch;
-        let mut seed =
-            batch.wrapping_mul(0xA24B_AED4_963E_E407) ^ ((self.prestige.resets as u64) << 48);
+        let mut seed = batch.wrapping_mul(0xA24B_AED4_963E_E407)
+            ^ ((self.prestige.resets as u64) << 48)
+            ^ ((self.candidates_rerolls as u64) << 24);
         self.candidates = (0..data.crew.candidates_per_batch)
             .map(|i| {
                 let role = if i % 2 == 0 {
@@ -648,6 +672,27 @@ mod tests {
         advance(&mut later, &data, period);
         assert_ne!(later.candidates, world.candidates);
         assert_eq!(later.candidates.len(), 4);
+    }
+
+    #[test]
+    fn paying_brings_new_candidates_and_restarts_the_countdown() {
+        let (mut world, data) = setup();
+        let period = 5.0 * 60.0 * data.balance.time_scale;
+        advance(&mut world, &data, period * 0.6);
+        let before = world.candidates.clone();
+        world.money = 1000.0;
+        assert_eq!(world.candidates_reroll_cost(&data), 200.0);
+        assert_eq!(world.reroll_candidates(&data), Ok(200.0));
+        assert_eq!(world.money, 800.0);
+        assert_eq!(world.candidates.len(), 4);
+        assert_ne!(world.candidates, before);
+        assert!((world.next_candidates_in(&data) - 5.0 * 60.0).abs() < 1e-6);
+        // Les candidats restent jusqu'au prochain arrivage, compté depuis le paiement.
+        let paid = world.candidates.clone();
+        advance(&mut world, &data, period * 0.6);
+        assert_eq!(world.candidates, paid);
+        advance(&mut world, &data, period * 0.5);
+        assert_ne!(world.candidates, paid);
     }
 
     #[test]

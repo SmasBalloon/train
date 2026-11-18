@@ -189,7 +189,7 @@ impl UnlockStatus<'_> {
 }
 
 impl World {
-    fn pay(&mut self, cost: f64) -> Result<(), ActionError> {
+    pub(crate) fn pay(&mut self, cost: f64) -> Result<(), ActionError> {
         if self.money < cost {
             return Err(ActionError::NotEnoughMoney { needed: cost });
         }
@@ -746,13 +746,19 @@ impl World {
     }
 
     /// Prix de construction d'une ligne : longueur, relief du pays et époque.
+    /// Les améliorations du réseau sont posées d'office, et comptées dans le prix.
     pub fn line_cost(&self, data: &GameData, line: &Line) -> f64 {
         let relief = data.country_of_line(&line.id).map_or(1.0, |c| c.build_cost);
-        data.balance.build_cost_per_km
+        let track = data.balance.build_cost_per_km
             * line.length_km
             * relief
             * self.era(data).build_mult
-            * self.modifiers(data).build_cost
+            * self.modifiers(data).build_cost;
+        let upgrades: f64 = self
+            .network_upgrades(data)
+            .map(|u| self.upgrade_cost_on(data, line, u))
+            .sum();
+        track + upgrades
     }
 
     /// Ce qui empêche de construire une ligne, argent mis à part.
@@ -789,6 +795,7 @@ impl World {
             return Err(blocker);
         }
         let cost = self.line_cost(data, line);
+        let upgrades: Vec<String> = self.network_upgrades(data).map(|u| u.id.clone()).collect();
         self.pay(cost)?;
         let state = self
             .lines
@@ -796,6 +803,7 @@ impl World {
             .ok_or(ActionError::UnknownLine)?;
         state.built = true;
         state.condition = 1.0;
+        state.upgrades.extend(upgrades);
         Ok(cost)
     }
 
@@ -909,23 +917,52 @@ impl World {
         Ok(cost)
     }
 
-    // ----- Améliorations de ligne -----
+    // ----- Améliorations du réseau -----
+    //
+    // Les améliorations valent pour tout le réseau : on les pose d'un coup sur
+    // toutes les lignes construites, et chaque ligne construite ensuite les
+    // reçoit (son prix de construction les inclut).
 
-    pub fn upgrade_cost(&self, data: &GameData, line_id: &str, upgrade: &Upgrade) -> Option<f64> {
-        let line = data.line(line_id)?;
-        let country = data.country_of_line(line_id).map_or(1.0, |c| c.build_cost);
-        Some(upgrade.cost_per_km * line.length_km * country * self.modifiers(data).build_cost)
+    /// Prix d'une amélioration sur une seule ligne.
+    fn upgrade_cost_on(&self, data: &GameData, line: &Line, upgrade: &Upgrade) -> f64 {
+        let country = data.country_of_line(&line.id).map_or(1.0, |c| c.build_cost);
+        upgrade.cost_per_km * line.length_km * country * self.modifiers(data).build_cost
+    }
+
+    /// Lignes construites qui n'ont pas encore cette amélioration.
+    fn lines_missing<'a>(
+        &'a self,
+        data: &'a GameData,
+        upgrade_id: &'a str,
+    ) -> impl Iterator<Item = &'a Line> + 'a {
+        data.lines().filter(move |l| {
+            self.lines
+                .get(&l.id)
+                .is_some_and(|s| s.built && !s.upgrades.contains(upgrade_id))
+        })
+    }
+
+    /// Améliorations posées sur tout le réseau construit.
+    pub fn network_upgrades<'a>(
+        &'a self,
+        data: &'a GameData,
+    ) -> impl Iterator<Item = &'a Upgrade> + 'a {
+        data.upgrades
+            .iter()
+            .filter(move |u| self.lines_missing(data, &u.id).next().is_none())
+    }
+
+    /// Prix pour poser une amélioration sur tout le réseau (les lignes qui
+    /// l'ont déjà ne coûtent rien).
+    pub fn upgrade_cost(&self, data: &GameData, upgrade: &Upgrade) -> f64 {
+        self.lines_missing(data, &upgrade.id)
+            .map(|l| self.upgrade_cost_on(data, l, upgrade))
+            .sum()
     }
 
     /// Ce qui empêche d'installer cette amélioration, argent mis à part.
-    pub fn upgrade_blocker(
-        &self,
-        data: &GameData,
-        line_id: &str,
-        upgrade: &Upgrade,
-    ) -> Option<ActionError> {
-        let installed = &self.lines.get(line_id)?.upgrades;
-        if installed.contains(&upgrade.id) {
+    pub fn upgrade_blocker(&self, data: &GameData, upgrade: &Upgrade) -> Option<ActionError> {
+        if self.lines_missing(data, &upgrade.id).next().is_none() {
             return Some(ActionError::AlreadyInstalled);
         }
         if let Err(e) = self.check_era(data, &upgrade.era) {
@@ -935,7 +972,7 @@ impl World {
             return Some(ActionError::Locked(name));
         }
         if let Some(previous) = &upgrade.requires_upgrade
-            && !installed.contains(previous)
+            && self.lines_missing(data, previous).next().is_some()
         {
             let name = data
                 .upgrade(previous)
@@ -945,26 +982,17 @@ impl World {
         None
     }
 
-    pub fn buy_upgrade(
-        &mut self,
-        data: &GameData,
-        line_id: &str,
-        upgrade_id: &str,
-    ) -> Result<f64, ActionError> {
+    /// Pose une amélioration sur toutes les lignes construites ; renvoie la dépense.
+    pub fn buy_upgrade(&mut self, data: &GameData, upgrade_id: &str) -> Result<f64, ActionError> {
         let upgrade = data
             .upgrade(upgrade_id)
             .ok_or(ActionError::UnknownUpgrade)?;
-        let cost = self
-            .upgrade_cost(data, line_id, upgrade)
-            .ok_or(ActionError::UnknownLine)?;
-        if !self.lines.contains_key(line_id) {
-            return Err(ActionError::UnknownLine);
-        }
-        if let Some(blocker) = self.upgrade_blocker(data, line_id, upgrade) {
+        if let Some(blocker) = self.upgrade_blocker(data, upgrade) {
             return Err(blocker);
         }
+        let cost = self.upgrade_cost(data, upgrade);
         self.pay(cost)?;
-        if let Some(state) = self.lines.get_mut(line_id) {
+        for state in self.lines.values_mut().filter(|s| s.built) {
             state.upgrades.insert(upgrade_id.to_string());
         }
         Ok(cost)
@@ -1524,33 +1552,63 @@ mod tests {
         let (mut world, data) = setup();
         world.money = 1e9;
         assert_eq!(
-            world.buy_upgrade(&data, LINE, "steel_rails"),
+            world.buy_upgrade(&data, "steel_rails"),
             Err(ActionError::WrongEra("Âge d'or de la vapeur".into()))
         );
         enter(&mut world, "apogee");
         assert_eq!(
-            world.buy_upgrade(&data, LINE, "steel_rails"),
+            world.buy_upgrade(&data, "steel_rails"),
             Err(ActionError::Locked("Acier Bessemer".into()))
         );
         world
             .research_done
             .extend(["bessemer_steel", "welded_rails"].map(String::from));
         assert_eq!(
-            world.buy_upgrade(&data, LINE, "heavy_track"),
+            world.buy_upgrade(&data, "heavy_track"),
             Err(ActionError::NeedsUpgrade("Rails en acier".into()))
         );
         // 19 km à 400 € le km.
-        assert_eq!(world.buy_upgrade(&data, LINE, "steel_rails"), Ok(7600.0));
+        assert_eq!(world.buy_upgrade(&data, "steel_rails"), Ok(7600.0));
         assert_eq!(
-            world.buy_upgrade(&data, LINE, "steel_rails"),
+            world.buy_upgrade(&data, "steel_rails"),
             Err(ActionError::AlreadyInstalled)
         );
-        assert!(world.buy_upgrade(&data, LINE, "heavy_track").is_ok());
+        assert!(world.buy_upgrade(&data, "heavy_track").is_ok());
         assert_eq!(
-            world.buy_upgrade(&data, LINE, "nope"),
+            world.buy_upgrade(&data, "nope"),
             Err(ActionError::UnknownUpgrade)
         );
         assert_eq!(world.lines[LINE].upgrades.len(), 2);
+    }
+
+    #[test]
+    fn upgrades_cover_the_whole_network() {
+        let (mut world, data) = setup();
+        world.money = 1e9;
+        enter(&mut world, "apogee");
+        world.research_done.insert("bessemer_steel".into());
+        let track = world.build_line(&data, "darlington_york").unwrap();
+        // 19 + 70 km à 400 € le km.
+        assert_eq!(world.buy_upgrade(&data, "steel_rails"), Ok(35_600.0));
+        assert!(world.lines[LINE].upgrades.contains("steel_rails"));
+        assert!(
+            world.lines["darlington_york"]
+                .upgrades
+                .contains("steel_rails")
+        );
+        // Une ligne construite ensuite reçoit l'amélioration, et la paie.
+        let york_leeds = data.line("york_leeds").unwrap();
+        let bare = data.balance.build_cost_per_km * york_leeds.length_km;
+        let cost = world.build_line(&data, "york_leeds").unwrap();
+        assert!(cost > bare && track > 0.0, "{cost} > {bare}");
+        assert!(world.lines["york_leeds"].upgrades.contains("steel_rails"));
+        assert_eq!(
+            world.buy_upgrade(&data, "steel_rails"),
+            Err(ActionError::AlreadyInstalled)
+        );
+        // Une ligne qui en manque (ancienne sauvegarde) : on ne paie que pour elle.
+        world.lines.get_mut(LINE).unwrap().upgrades.clear();
+        assert_eq!(world.buy_upgrade(&data, "steel_rails"), Ok(7600.0));
     }
 
     #[test]

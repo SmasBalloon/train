@@ -691,10 +691,7 @@ fn draw_upgrades(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         app,
         buf,
         area,
-        &format!(
-            "Améliorations : {}",
-            app.data.line(app.line_id()).map_or("", |l| l.name.as_str())
-        ),
+        "Améliorations du réseau (toutes les lignes)",
         upgrades.len(),
         (96, 26),
     );
@@ -703,11 +700,8 @@ fn draw_upgrades(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         .iter()
         .enumerate()
         .map(|(i, upgrade)| {
-            let cost = app
-                .world
-                .upgrade_cost(&app.data, line_id, upgrade)
-                .unwrap_or(0.0);
-            let (status, style) = match app.world.upgrade_blocker(&app.data, line_id, upgrade) {
+            let cost = app.world.upgrade_cost(&app.data, upgrade);
+            let (status, style) = match app.world.upgrade_blocker(&app.data, upgrade) {
                 Some(ActionError::AlreadyInstalled) => ("installée", t.good),
                 Some(blocker) => (short_reason(&blocker), t.warn),
                 None if app.world.money < cost => ("trop chère", t.dim),
@@ -758,11 +752,24 @@ fn draw_upgrades(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         }
         if let Some(blocker) = app
             .world
-            .upgrade_blocker(&app.data, line_id, upgrade)
+            .upgrade_blocker(&app.data, upgrade)
             .filter(|b| *b != ActionError::AlreadyInstalled)
         {
             lines.push(Line::styled(format!("Indisponible : {blocker}"), t.warn));
         }
+        let built: Vec<_> = app
+            .data
+            .lines()
+            .filter(|l| app.world.is_built(&l.id))
+            .collect();
+        lines.push(Line::styled(
+            format!(
+                "S'installe sur les {} lignes du réseau ({} km), et d'office sur chaque ligne construite ensuite.",
+                built.len(),
+                format::quantity(built.iter().map(|l| l.length_km).sum())
+            ),
+            t.dim,
+        ));
         if let (Some(line), Some(state)) = (app.data.line(line_id), app.world.lines.get(line_id)) {
             let props = LineProps::of(state, &app.data);
             let m = app.world.modifiers(&app.data);
@@ -1565,7 +1572,7 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
     if rows.is_empty() {
         let text = if recruiting {
             format!(
-                "Plus de candidats pour l'instant : de nouveaux se présenteront dans {}.",
+                "Plus de candidats pour l'instant : de nouveaux se présenteront dans {} (r : les faire venir tout de suite).",
                 format::duration(app.world.next_candidates_in(&app.data))
             )
         } else {
@@ -1660,10 +1667,14 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         app,
         buf,
         foot,
-        if recruiting {
-            "Entrée : embaucher    Tab : employés    haut/bas : choisir    Échap : fermer"
+        &if recruiting {
+            format!(
+                "Entrée : embaucher    r : nouveaux candidats ({})    Tab : employés    Échap : fermer",
+                format::money(app.world.candidates_reroll_cost(&app.data))
+            )
         } else {
             "Entrée : affecter au train sélectionné (ou réserve)    f : formations    x : licencier    Tab : recrutement    Échap : fermer"
+                .to_string()
         },
     );
 }

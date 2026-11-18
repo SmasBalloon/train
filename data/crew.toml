@@ -8,6 +8,7 @@
 
 candidates_per_batch = 4    # candidats proposés à chaque arrivage (moitié de chaque métier)
 candidates_every_min = 5.0  # un nouvel arrivage de candidats toutes les 5 minutes réelles
+candidates_reroll_share = 0.20  # part de la trésorerie pour faire venir un arrivage tout de suite
 base_wage          = 3.0    # salaire horaire d'un débutant, première époque
 skill_wage         = 9.0    # supplément horaire pour un équipier parfait
 hire_fee_hours     = 24.0   # prime d'embauche, en heures de salaire

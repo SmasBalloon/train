@@ -328,6 +328,8 @@ pub struct CrewRules {
     pub candidates_per_batch: u32,
     /// Minutes réelles entre deux arrivages de candidats.
     pub candidates_every_min: f64,
+    /// Part de la trésorerie payée pour faire venir un arrivage sans attendre.
+    pub candidates_reroll_share: f64,
     pub base_wage: f64,
     pub skill_wage: f64,
     pub hire_fee_hours: f64,

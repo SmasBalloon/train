@@ -808,12 +808,14 @@ impl App {
             return;
         };
         let (id, name) = (upgrade.id.clone(), upgrade.name.fr.clone());
-        let line = self.line_id().to_string();
-        match self.world.buy_upgrade(&self.data, &line, &id) {
+        match self.world.buy_upgrade(&self.data, &id) {
             Ok(cost) => {
                 self.popup_msg = None;
                 self.push_log(
-                    format!("{name} : installée pour {}", format::money(cost)),
+                    format!(
+                        "{name} : installée sur tout le réseau pour {}",
+                        format::money(cost)
+                    ),
                     LogKind::Good,
                 );
             }
@@ -1008,6 +1010,24 @@ impl App {
             Ok(text) => {
                 self.popup_msg = None;
                 self.push_log(text, LogKind::Info);
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Paie une part de la trésorerie pour faire venir de nouveaux candidats.
+    fn reroll_candidates(&mut self) {
+        match self.world.reroll_candidates(&self.data) {
+            Ok(cost) => {
+                self.popup_msg = None;
+                self.popup = Popup::Crew {
+                    sel: 0,
+                    recruiting: true,
+                };
+                self.push_log(
+                    format!("Nouveaux candidats convoqués pour {}", format::money(cost)),
+                    LogKind::Info,
+                );
             }
             Err(e) => self.popup_msg = Some(e.to_string()),
         }
@@ -1497,6 +1517,8 @@ impl App {
                     });
                 } else if code == KeyCode::Char('x') && !recruiting {
                     self.dismiss_crew(sel);
+                } else if code == KeyCode::Char('r') && recruiting {
+                    self.reroll_candidates();
                 } else if code == KeyCode::Char('f') {
                     self.open(Popup::Training { sel: 0 });
                 } else if closes || code == KeyCode::Char('s') {

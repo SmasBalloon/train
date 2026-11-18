@@ -41,7 +41,7 @@ rail --new        # recommence une partie (l'ancienne est gardée en save.dat.ba
 | `rail board`    | tableau des départs et arrivées, façon gare                  |
 | `rail fleet`    | ouvre directement la flotte                                  |
 | `rail research` | ouvre directement la liste des recherches                    |
-| `rail upgrade`  | ouvre directement les améliorations de ligne                 |
+| `rail upgrade`  | ouvre directement les améliorations du réseau                |
 | `rail status`   | une ligne d'état (argent, trains en route, revenu) pour un prompt ou tmux |
 
 Options d'affichage : `--ascii` (sans caractères Unicode), `--no-color`
@@ -89,7 +89,7 @@ s'affiche. Une seconde réelle vaut une minute de jeu.
 | `r`                       | bureau d'études : liste des recherches                    |
 | `n`                       | réseau : concessions, lignes à construire                 |
 | `e`                       | époques : conditions pour passer à la suivante            |
-| `u`                       | améliorations de la ligne (rails, caténaire…)             |
+| `u`                       | améliorations du réseau entier (rails, caténaire…)       |
 | `c`                       | combustibles : stocks et cours du jour                    |
 | `t`                       | tarifs et horaires, satisfaction des clientèles           |
 | `g`                       | services : automatiser réparations, achats, horaires      |
@@ -115,7 +115,8 @@ Ouvre les équipages (`s`) et embauche un conducteur dans l'onglet Recrutement :
 il prend aussitôt un train qui n'en a pas (le train sélectionné d'abord), ou
 attend en réserve si tous sont pourvus. Les trains neufs reçoivent les
 conducteurs en réserve. La prime du tout premier conducteur est offerte, pour
-pouvoir démarrer.
+pouvoir démarrer. Si aucun candidat ne convient, `r` en fait venir de nouveaux
+aussitôt contre 20 % de la trésorerie, et relance le compte à rebours.
 
 Pour changer de conducteur, sélectionne le train, puis Entrée sur un employé
 dans l'onglet Employés : le titulaire retourne en réserve. Entrée une seconde

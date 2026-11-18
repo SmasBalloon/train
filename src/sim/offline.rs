@@ -326,12 +326,12 @@ mod balance {
                 .map(|l| l.id.as_str())
                 .collect();
             let mut spent_trains = 0.0;
-            for line in &built {
-                for upgrade in &data.upgrades {
-                    if let Ok(cost) = world.buy_upgrade(&data, line, &upgrade.id) {
-                        spent_upgrades += cost;
-                    }
+            for upgrade in &data.upgrades {
+                if let Ok(cost) = world.buy_upgrade(&data, &upgrade.id) {
+                    spent_upgrades += cost;
                 }
+            }
+            for line in &built {
                 // La meilleure machine achetable : celle qui offre le plus de places-kilomètres.
                 let m = world.modifiers(&data);
                 let best = data

@@ -260,6 +260,13 @@ pub struct World {
     /// Arrivage pour lequel les candidats ont été tirés.
     #[serde(default, alias = "candidates_day")]
     pub candidates_batch: u64,
+    /// Instant (horloge de jeu) d'où partent les arrivages : avancé quand le
+    /// joueur paie pour faire venir de nouveaux candidats.
+    #[serde(default)]
+    pub candidates_anchor: f64,
+    /// Arrivages anticipés contre paiement (varie le tirage).
+    #[serde(default)]
+    pub candidates_rerolls: u32,
     #[serde(default)]
     pub next_crew_id: u32,
     /// Conducteurs embauchés depuis la fondation (le premier est sans prime).
@@ -314,6 +321,8 @@ impl World {
             crew: Vec::new(),
             candidates: Vec::new(),
             candidates_batch: 0,
+            candidates_anchor: 0.0,
+            candidates_rerolls: 0,
             next_crew_id: 0,
             drivers_hired: 0,
             trainings: Vec::new(),
@@ -407,6 +416,9 @@ impl World {
             .retain(|id, stock| data.fuel(id).is_some() && stock.is_finite() && *stock >= 0.0);
         self.events_done.retain(|id| data.event(id).is_some());
         self.staff.retain(|id| data.staff(id).is_some());
+        if !self.candidates_anchor.is_finite() || self.candidates_anchor > self.clock {
+            self.candidates_anchor = 0.0;
+        }
         for member in self.crew.iter_mut().chain(&mut self.candidates) {
             for skill in &mut member.skills {
                 *skill = if skill.is_finite() {
