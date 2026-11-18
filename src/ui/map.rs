@@ -510,34 +510,51 @@ fn draw_stations(app: &App, buf: &mut Buffer, area: Rect) {
         (!served, !capital, std::cmp::Reverse(station.population))
     });
 
-    let mut placed: Vec<(i32, i32, i32, i32)> = Vec::new();
-    for (served, country, capital, station) in stations {
-        let (cx, cy) = cell_of(app.camera.to_px(station.pos, size));
-        if cy < -8 || cy > area.height as i32 + 1 || cx < -40 || cx > area.width as i32 + 40 {
-            continue;
-        }
-        let owned = app.world.has_concession(&country.id);
-        // Ce qui s'affiche dépend du niveau de zoom et de l'intérêt de la gare.
-        let named = if served {
-            true
-        } else if owned {
-            scale >= country_scale || capital
-        } else {
-            capital && scale >= country_scale
-        };
-        if !served && !named {
-            continue;
-        }
-        let (x, y) = (area.x as i32 + cx, area.y as i32 + cy);
+    // Ce qui s'affiche dépend du niveau de zoom et de l'intérêt de la gare.
+    let visible: Vec<_> = stations
+        .into_iter()
+        .filter_map(|(served, country, capital, station)| {
+            let (cx, cy) = cell_of(app.camera.to_px(station.pos, size));
+            if cy < -8 || cy > area.height as i32 + 1 || cx < -40 || cx > area.width as i32 + 40 {
+                return None;
+            }
+            let owned = app.world.has_concession(&country.id);
+            let named = if served {
+                true
+            } else if owned {
+                scale >= country_scale || capital
+            } else {
+                capital && scale >= country_scale
+            };
+            (served || named).then_some((
+                served,
+                named,
+                station,
+                area.x as i32 + cx,
+                area.y as i32 + cy,
+            ))
+        })
+        .collect();
+
+    // Tous les marqueurs d'abord : aucune étiquette ne doit en recouvrir un.
+    let mut markers: Vec<(i32, i32, i32, i32)> = Vec::new();
+    for &(served, _, _, x, y) in &visible {
         let (marker, style) = if served {
             (app.glyphs.station, t.station)
         } else {
             (app.glyphs.station_idle, t.dim)
         };
         put_str(buf, area, x, y, &marker.to_string(), style);
+        markers.push((x, y, 1, 1));
+    }
+
+    let mut placed: Vec<(i32, i32, i32, i32)> = Vec::new();
+
+    for (served, named, station, x, y) in visible {
         if !named {
             continue;
         }
+        let style = if served { t.station } else { t.dim };
 
         let mut lines: Vec<(String, Style)> = vec![(station.name.to_uppercase(), style)];
         if served && scale >= country_scale {
@@ -603,13 +620,23 @@ fn draw_stations(app: &App, buf: &mut Buffer, area: Rect) {
             .map(|(text, _)| text.chars().count() as i32)
             .max()
             .unwrap_or(0);
-        let rect = (x - width / 2, y + 1, width, lines.len() as i32);
-        if placed.iter().any(|other| overlaps(rect, *other)) {
+        // Sous la gare de préférence, sinon au-dessus ; à défaut, pas d'étiquette.
+        let height = lines.len() as i32;
+        let free = |top: i32, avoid_markers: bool| {
+            let rect = (x - width / 2, top, width, height);
+            let hit = |others: &[(i32, i32, i32, i32)]| others.iter().any(|o| overlaps(rect, *o));
+            (!hit(&placed) && !(avoid_markers && hit(&markers))).then_some(rect)
+        };
+        // Une gare desservie peut, en dernier recours, passer sur un marqueur voisin.
+        let Some(rect) = free(y + 1, true)
+            .or_else(|| free(y - height, true))
+            .or_else(|| free(y + 1, !served))
+        else {
             continue;
-        }
+        };
         placed.push(rect);
         for (row, (text, style)) in lines.iter().enumerate() {
-            put_centered(buf, area, x, y + 1 + row as i32, text, *style);
+            put_centered(buf, area, x, rect.1 + row as i32, text, *style);
         }
     }
 }

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::{BonusKind, Era, GameData, Line};
+use crate::data::{BonusKind, Country, Era, GameData, Line};
 
 use super::crew::{CrewMember, TrainCrew, TrainingSession};
 use super::kinematics::Profile;
@@ -270,11 +270,24 @@ pub struct World {
     pub trainings: Vec<TrainingSession>,
     #[serde(default)]
     pub next_training_id: u32,
+    /// Pays où la compagnie a été fondée (vide : pays de départ par défaut).
+    #[serde(default)]
+    pub home: String,
+    /// Vrai tant que le joueur n'a pas choisi le pays de sa nouvelle compagnie.
+    #[serde(default)]
+    pub choosing_home: bool,
 }
 
 impl World {
-    /// Nouvelle partie : une ligne, une locomotive à quai, le matin du jour 1.
+    /// Nouvelle partie dans le pays de départ par défaut.
     pub fn new(data: &GameData) -> World {
+        World::founded_in(data, &data.balance.start_country)
+    }
+
+    /// Nouvelle partie dans un pays : sa ligne de départ, une locomotive à
+    /// quai, le matin du jour 1. Un pays sans ligne de départ est remplacé par
+    /// le pays par défaut.
+    pub fn founded_in(data: &GameData, country_id: &str) -> World {
         let mut world = World {
             version: SAVE_VERSION,
             clock: 8.0 * 3600.0,
@@ -305,10 +318,27 @@ impl World {
             drivers_hired: 0,
             trainings: Vec::new(),
             next_training_id: 0,
+            home: country_id.to_string(),
+            choosing_home: false,
         };
         world.reconcile(data);
-        world.spawn_train(&data.balance.start_locomotive, &data.balance.start_line);
+        let line = world.start_line(data).to_string();
+        world.spawn_train(&data.balance.start_locomotive, &line);
         world
+    }
+
+    /// Pays où la compagnie a été fondée.
+    pub fn home_country<'a>(&self, data: &'a GameData) -> Option<&'a Country> {
+        data.country(&self.home)
+            .filter(|c| c.start_line.is_some())
+            .or(data.default_home())
+    }
+
+    /// Ligne où la compagnie a commencé, toujours construite.
+    pub fn start_line<'a>(&self, data: &'a GameData) -> &'a str {
+        self.home_country(data)
+            .and_then(|c| c.start_line.as_deref())
+            .unwrap_or_default()
     }
 
     /// Aligne l'état sur les données (après un changement de mods ou de
@@ -335,9 +365,14 @@ impl World {
                 built: false,
             });
         }
+        // Pays de fondation : celui des sauvegardes antérieures au choix du pays
+        // est le pays par défaut.
+        if let Some(home) = self.home_country(data) {
+            self.home = home.id.clone();
+        }
         // La ligne de départ est toujours construite, comme toute ligne où roule
         // un train (sauvegardes antérieures aux lignes à construire).
-        let in_use: BTreeSet<&str> = std::iter::once(b.start_line.as_str())
+        let in_use: BTreeSet<&str> = std::iter::once(self.start_line(data))
             .chain(self.trains.iter().map(|t| t.line.as_str()))
             .collect();
         for (id, line) in &mut self.lines {
@@ -345,8 +380,7 @@ impl World {
         }
         // Concessions : le pays de départ, et tout pays touché par une ligne construite.
         self.countries.retain(|id| data.country(id).is_some());
-        self.countries
-            .extend(data.home_country().map(|c| c.id.clone()));
+        self.countries.insert(self.home.clone());
         for line in data
             .lines()
             .filter(|l| self.lines.get(&l.id).is_some_and(|s| s.built))

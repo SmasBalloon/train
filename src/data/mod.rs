@@ -50,7 +50,8 @@ pub struct Balance {
     pub time_scale: f64,
     pub start_money: f64,
     pub start_locomotive: String,
-    pub start_line: String,
+    /// Pays de départ par défaut (il doit avoir une `start_line`).
+    pub start_country: String,
     pub fare_per_km: f64,
     pub demand_per_1000_per_h: f64,
     pub demand_ref_km: f64,
@@ -530,6 +531,10 @@ pub struct Country {
     pub era: Option<String>,
     #[serde(default)]
     pub concession_cost: f64,
+    /// Ligne intérieure où commence une compagnie fondée dans ce pays ; sans
+    /// elle, le pays ne peut pas être choisi comme pays de départ.
+    #[serde(default)]
+    pub start_line: Option<String>,
     /// Multiplicateur de demande par catégorie de trafic.
     #[serde(default)]
     pub demand: BTreeMap<String, f64>,
@@ -843,9 +848,14 @@ impl GameData {
         self.countries.iter().find(|c| c.id == id)
     }
 
-    /// Pays où le joueur commence : celui de la ligne de départ.
-    pub fn home_country(&self) -> Option<&Country> {
-        self.country_of_line(&self.balance.start_line)
+    /// Pays de départ proposé par défaut.
+    pub fn default_home(&self) -> Option<&Country> {
+        self.country(&self.balance.start_country)
+    }
+
+    /// Pays où une compagnie peut être fondée : ceux qui ont une ligne de départ.
+    pub fn starting_countries(&self) -> impl Iterator<Item = &Country> {
+        self.countries.iter().filter(|c| c.start_line.is_some())
     }
 
     /// Pays des deux extrémités d'une ligne (identiques pour une ligne intérieure).

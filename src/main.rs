@@ -104,13 +104,18 @@ fn interactive(cli: &Cli, screen: Screen, popup: Popup) -> Result<()> {
     // Une fenêtre d'action n'a pas de sens en lecture seule.
     let popup = if writable { popup } else { Popup::None };
 
+    // Une nouvelle partie commence par le choix du pays de la compagnie.
+    let fresh = || World {
+        choosing_home: true,
+        ..World::new(&data)
+    };
     let (world, report) = if cli.new && writable {
         save::backup(&dir)?;
-        (World::new(&data), None)
+        (fresh(), None)
     } else {
         match save::load_current(&dir, &data)? {
             Some((world, report)) => (world, Some(report)),
-            None => (World::new(&data), None),
+            None => (fresh(), None),
         }
     };
     // Une fenêtre demandée en ligne de commande passe avant le résumé d'absence.

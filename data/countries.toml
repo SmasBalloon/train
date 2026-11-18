@@ -14,7 +14,13 @@
 #   iso              code du pays dans le fond de carte (ADM0_A3 de Natural Earth),
 #                    pour colorer son territoire
 #   label            où écrire le nom du pays (par défaut : au-dessus de sa capitale)
+#   start_line       ligne intérieure où commence une compagnie fondée dans ce pays
+#                    (au choix du joueur, à la nouvelle partie et à chaque
+#                    nationalisation) ; un pays sans start_line ne peut pas être
+#                    choisi comme pays de départ
 # La première gare d'un pays est sa capitale : un nouveau réseau y commence.
+# Le pays de départ est d'office concédé ; les autres s'achètent (era,
+# concession_cost), même le Royaume-Uni quand on démarre ailleurs.
 #
 # Gare : `population` est un poids relatif de la ville, pas un recensement.
 # Ligne : `era` est l'époque à partir de laquelle elle peut être construite.
@@ -29,7 +35,9 @@ gauge_mm   = 1435
 build_cost = 1.0
 terrain    = "vallonné"
 iso        = "GBR"
-label      = [-2.6, 52.6]
+concession_cost = 8000.0
+start_line = "stockton_darlington"
+label      = [-4.3, 57.2]
 demand     = { commuter = 1.0, tourist = 0.7, business = 0.9, freight = 1.3 }
 
   [[country.station]]
@@ -79,6 +87,60 @@ demand     = { commuter = 1.0, tourist = 0.7, business = 0.9, freight = 1.3 }
   name = "Édimbourg"
   coord = [-3.1883, 55.9533]
   population = 25000
+
+  [[country.station]]
+  id = "hartlepool"
+  name = "Hartlepool"
+  coord = [-1.2129, 54.6863]
+  population = 4000
+
+  [[country.station]]
+  id = "newcastle"
+  name = "Newcastle"
+  coord = [-1.6178, 54.9783]
+  population = 18000
+
+  [[country.station]]
+  id = "canterbury"
+  name = "Canterbury"
+  coord = [1.0789, 51.2802]
+  population = 5000
+
+  [[country.station]]
+  id = "whitstable"
+  name = "Whitstable"
+  coord = [1.026, 51.3607]
+  population = 3000
+
+  [[country.station]]
+  id = "brighton"
+  name = "Brighton"
+  coord = [-0.1372, 50.8225]
+  population = 10000
+
+  [[country.station]]
+  id = "birmingham"
+  name = "Birmingham"
+  coord = [-1.8904, 52.4862]
+  population = 35000
+
+  [[country.station]]
+  id = "bristol"
+  name = "Bristol"
+  coord = [-2.5879, 51.4545]
+  population = 22000
+
+  [[country.station]]
+  id = "plymouth"
+  name = "Plymouth"
+  coord = [-4.1427, 50.3755]
+  population = 12000
+
+  [[country.station]]
+  id = "glasgow"
+  name = "Glasgow"
+  coord = [-4.2518, 55.8642]
+  population = 30000
 
   [[country.line]]
   id = "stockton_darlington"
@@ -157,10 +219,116 @@ demand     = { commuter = 1.0, tourist = 0.7, business = 0.9, freight = 1.3 }
   max_trains = 6
   opened = 1846
 
+  [[country.line]]
+  id = "stockton_hartlepool"
+  name = "Stockton – Hartlepool"
+  from = "stockton"
+  to = "hartlepool"
+  length_km = 15.0
+  max_trains = 3
+  opened = 1835
+
+  [[country.line]]
+  id = "darlington_newcastle"
+  name = "Darlington – Newcastle"
+  from = "darlington"
+  to = "newcastle"
+  length_km = 60.0
+  max_trains = 5
+  opened = 1844
+
+  [[country.line]]
+  id = "canterbury_whitstable"
+  name = "Canterbury & Whitstable"
+  from = "canterbury"
+  to = "whitstable"
+  length_km = 10.0
+  max_trains = 3
+  opened = 1830
+
+  [[country.line]]
+  id = "london_canterbury"
+  name = "Londres – Canterbury"
+  from = "london"
+  to = "canterbury"
+  length_km = 90.0
+  max_trains = 5
+  opened = 1846
+
+  [[country.line]]
+  id = "london_brighton"
+  name = "Londres – Brighton"
+  from = "london"
+  to = "brighton"
+  length_km = 82.0
+  max_trains = 6
+  opened = 1841
+
+  [[country.line]]
+  id = "london_birmingham"
+  name = "Londres & Birmingham"
+  from = "london"
+  to = "birmingham"
+  length_km = 180.0
+  via = [[-0.77, 51.99]]
+  max_trains = 8
+  opened = 1838
+
+  [[country.line]]
+  id = "birmingham_manchester"
+  name = "Grand Junction (Birmingham – Manchester)"
+  from = "birmingham"
+  to = "manchester"
+  length_km = 130.0
+  via = [[-2.44, 53.09]]
+  max_trains = 6
+  opened = 1837
+
+  [[country.line]]
+  id = "london_bristol"
+  name = "Great Western (Londres – Bristol)"
+  from = "london"
+  to = "bristol"
+  length_km = 190.0
+  via = [[-1.78, 51.56]]
+  max_trains = 8
+  opened = 1841
+
+  [[country.line]]
+  id = "bristol_plymouth"
+  name = "Bristol – Plymouth"
+  from = "bristol"
+  to = "plymouth"
+  length_km = 205.0
+  via = [[-3.53, 50.72]]
+  max_trains = 6
+  opened = 1849
+
+  [[country.line]]
+  id = "edinburgh_glasgow"
+  name = "Édimbourg – Glasgow"
+  from = "edinburgh"
+  to = "glasgow"
+  length_km = 75.0
+  max_trains = 6
+  opened = 1842
+
+  [[country.line]]
+  id = "london_glasgow"
+  name = "West Coast (Londres – Glasgow)"
+  from = "london"
+  to = "glasgow"
+  length_km = 645.0
+  via = [[-1.9, 52.48], [-2.6, 53.4], [-2.93, 54.89]]
+  max_trains = 10
+  opened = 1848
+  era = "steam"
+
 # ──────────────────────────────── France ────────────────────────────────
 
 [[country]]
 id              = "france"
+start_line      = "saint_etienne_andrezieux"
 name            = { fr = "France", en = "France" }
 gauge_mm        = 1435
 build_cost      = 1.1
@@ -205,6 +373,60 @@ demand          = { commuter = 0.9, tourist = 1.3, business = 1.0, freight = 1.0
   name = "Strasbourg"
   coord = [7.7521, 48.5734]
   population = 18000
+
+  [[country.station]]
+  id = "saint_etienne"
+  name = "Saint-Étienne"
+  coord = [4.3872, 45.4397]
+  population = 9000
+
+  [[country.station]]
+  id = "andrezieux"
+  name = "Andrézieux"
+  coord = [4.2606, 45.5267]
+  population = 4000
+
+  [[country.station]]
+  id = "saint_germain"
+  name = "Saint-Germain-en-Laye"
+  coord = [2.0934, 48.8989]
+  population = 4000
+
+  [[country.station]]
+  id = "versailles"
+  name = "Versailles"
+  coord = [2.1301, 48.8049]
+  population = 8000
+
+  [[country.station]]
+  id = "rouen"
+  name = "Rouen"
+  coord = [1.0993, 49.4432]
+  population = 12000
+
+  [[country.station]]
+  id = "le_havre"
+  name = "Le Havre"
+  coord = [0.1079, 49.4944]
+  population = 10000
+
+  [[country.station]]
+  id = "nantes"
+  name = "Nantes"
+  coord = [-1.5536, 47.2184]
+  population = 16000
+
+  [[country.station]]
+  id = "toulouse"
+  name = "Toulouse"
+  coord = [1.4442, 43.6047]
+  population = 18000
+
+  [[country.station]]
+  id = "nice"
+  name = "Nice"
+  coord = [7.262, 43.7102]
+  population = 10000
 
   [[country.line]]
   id = "paris_lille"
@@ -267,10 +489,116 @@ demand          = { commuter = 0.9, tourist = 1.3, business = 1.0, freight = 1.0
   opened = 1936
   era = "apogee"
 
+  [[country.line]]
+  id = "saint_etienne_andrezieux"
+  name = "Saint-Étienne – Andrézieux"
+  from = "saint_etienne"
+  to = "andrezieux"
+  length_km = 18.0
+  max_trains = 4
+  opened = 1827
+
+  [[country.line]]
+  id = "saint_etienne_lyon"
+  name = "Saint-Étienne – Lyon"
+  from = "saint_etienne"
+  to = "lyon"
+  length_km = 58.0
+  via = [[4.79, 45.6]]
+  max_trains = 5
+  opened = 1832
+
+  [[country.line]]
+  id = "paris_saint_germain"
+  name = "Paris – Saint-Germain"
+  from = "paris"
+  to = "saint_germain"
+  length_km = 19.0
+  max_trains = 4
+  opened = 1837
+
+  [[country.line]]
+  id = "paris_versailles"
+  name = "Paris – Versailles"
+  from = "paris"
+  to = "versailles"
+  length_km = 18.0
+  max_trains = 4
+  opened = 1839
+
+  [[country.line]]
+  id = "paris_rouen"
+  name = "Paris – Rouen"
+  from = "paris"
+  to = "rouen"
+  length_km = 130.0
+  max_trains = 6
+  opened = 1843
+
+  [[country.line]]
+  id = "rouen_le_havre"
+  name = "Rouen – Le Havre"
+  from = "rouen"
+  to = "le_havre"
+  length_km = 90.0
+  max_trains = 5
+  opened = 1847
+
+  [[country.line]]
+  id = "paris_nantes"
+  name = "Paris – Nantes"
+  from = "paris"
+  to = "nantes"
+  length_km = 430.0
+  via = [[1.91, 47.9], [0.68, 47.39]]
+  max_trains = 8
+  opened = 1851
+
+  [[country.line]]
+  id = "bordeaux_toulouse"
+  name = "Bordeaux – Toulouse"
+  from = "bordeaux"
+  to = "toulouse"
+  length_km = 260.0
+  max_trains = 6
+  opened = 1856
+
+  [[country.line]]
+  id = "toulouse_marseille"
+  name = "Toulouse – Marseille"
+  from = "toulouse"
+  to = "marseille"
+  length_km = 400.0
+  via = [[3.88, 43.61]]
+  max_trains = 8
+  opened = 1857
+
+  [[country.line]]
+  id = "marseille_nice"
+  name = "Marseille – Nice"
+  from = "marseille"
+  to = "nice"
+  length_km = 225.0
+  via = [[5.93, 43.12]]
+  max_trains = 6
+  opened = 1864
+
+  [[country.line]]
+  id = "marseille_barcelona"
+  name = "Marseille – Barcelone"
+  from = "marseille"
+  to = "barcelona"
+  length_km = 510.0
+  via = [[3.88, 43.61], [2.9, 42.7]]
+  max_trains = 8
+  opened = 1878
+  era = "steam"
+
 # ─────────────────────────────── Allemagne ───────────────────────────────
 
 [[country]]
 id              = "germany"
+start_line      = "nuremberg_furth"
 name            = { fr = "Allemagne", en = "Germany" }
 gauge_mm        = 1435
 build_cost      = 1.0
@@ -310,6 +638,54 @@ demand          = { commuter = 1.0, tourist = 0.8, business = 1.2, freight = 1.4
   name = "Munich"
   coord = [11.582, 48.1351]
   population = 30000
+
+  [[country.station]]
+  id = "nuremberg"
+  name = "Nuremberg"
+  coord = [11.0767, 49.4521]
+  population = 8000
+
+  [[country.station]]
+  id = "furth"
+  name = "Fürth"
+  coord = [10.9887, 49.4771]
+  population = 5000
+
+  [[country.station]]
+  id = "potsdam"
+  name = "Potsdam"
+  coord = [13.0645, 52.3906]
+  population = 6000
+
+  [[country.station]]
+  id = "leipzig"
+  name = "Leipzig"
+  coord = [12.3731, 51.3397]
+  population = 16000
+
+  [[country.station]]
+  id = "dresden"
+  name = "Dresde"
+  coord = [13.7373, 51.0504]
+  population = 18000
+
+  [[country.station]]
+  id = "hanover"
+  name = "Hanovre"
+  coord = [9.732, 52.3759]
+  population = 16000
+
+  [[country.station]]
+  id = "bremen"
+  name = "Brême"
+  coord = [8.8017, 53.0793]
+  population = 14000
+
+  [[country.station]]
+  id = "stuttgart"
+  name = "Stuttgart"
+  coord = [9.1829, 48.7758]
+  population = 16000
 
   [[country.line]]
   id = "berlin_hamburg"
@@ -370,10 +746,105 @@ demand          = { commuter = 1.0, tourist = 0.8, business = 1.2, freight = 1.4
   max_trains = 8
   opened = 1861
 
+  [[country.line]]
+  id = "nuremberg_furth"
+  name = "Nuremberg – Fürth (Ludwigsbahn)"
+  from = "nuremberg"
+  to = "furth"
+  length_km = 6.0
+  max_trains = 4
+  opened = 1835
+
+  [[country.line]]
+  id = "nuremberg_munich"
+  name = "Nuremberg – Munich"
+  from = "nuremberg"
+  to = "munich"
+  length_km = 200.0
+  via = [[10.8978, 48.3705]]
+  max_trains = 6
+  opened = 1849
+
+  [[country.line]]
+  id = "berlin_potsdam"
+  name = "Berlin – Potsdam"
+  from = "berlin"
+  to = "potsdam"
+  length_km = 26.0
+  max_trains = 4
+  opened = 1838
+
+  [[country.line]]
+  id = "leipzig_dresden"
+  name = "Leipzig – Dresde"
+  from = "leipzig"
+  to = "dresden"
+  length_km = 116.0
+  max_trains = 6
+  opened = 1839
+
+  [[country.line]]
+  id = "berlin_leipzig"
+  name = "Berlin – Leipzig"
+  from = "berlin"
+  to = "leipzig"
+  length_km = 160.0
+  max_trains = 6
+  opened = 1841
+
+  [[country.line]]
+  id = "hamburg_hanover"
+  name = "Hambourg – Hanovre"
+  from = "hamburg"
+  to = "hanover"
+  length_km = 180.0
+  max_trains = 6
+  opened = 1847
+
+  [[country.line]]
+  id = "hamburg_bremen"
+  name = "Hambourg – Brême"
+  from = "hamburg"
+  to = "bremen"
+  length_km = 120.0
+  max_trains = 5
+  opened = 1874
+
+  [[country.line]]
+  id = "hanover_cologne"
+  name = "Cologne – Minden (Hanovre – Cologne)"
+  from = "hanover"
+  to = "cologne"
+  length_km = 290.0
+  via = [[8.92, 52.29], [7.46, 51.51]]
+  max_trains = 8
+  opened = 1847
+
+  [[country.line]]
+  id = "frankfurt_stuttgart"
+  name = "Francfort – Stuttgart"
+  from = "frankfurt"
+  to = "stuttgart"
+  length_km = 210.0
+  via = [[8.47, 49.49]]
+  max_trains = 6
+  opened = 1859
+
+  [[country.line]]
+  id = "stuttgart_munich"
+  name = "Stuttgart – Munich"
+  from = "stuttgart"
+  to = "munich"
+  length_km = 240.0
+  via = [[10.0, 48.4], [10.9, 48.37]]
+  max_trains = 6
+  opened = 1854
+
 # ──────────────────────────────── Espagne ────────────────────────────────
 
 [[country]]
 id              = "spain"
+start_line      = "barcelona_mataro"
 name            = { fr = "Espagne", en = "Spain" }
 gauge_mm        = 1668
 build_cost      = 1.6
@@ -401,6 +872,48 @@ demand          = { commuter = 0.8, tourist = 1.5, business = 0.9, freight = 0.9
   name = "Séville"
   coord = [-5.9845, 37.3891]
   population = 20000
+
+  [[country.station]]
+  id = "mataro"
+  name = "Mataró"
+  coord = [2.4445, 41.5381]
+  population = 4000
+
+  [[country.station]]
+  id = "aranjuez"
+  name = "Aranjuez"
+  coord = [-3.6021, 40.0331]
+  population = 5000
+
+  [[country.station]]
+  id = "valencia"
+  name = "Valence"
+  coord = [-0.3763, 39.4699]
+  population = 16000
+
+  [[country.station]]
+  id = "zaragoza"
+  name = "Saragosse"
+  coord = [-0.8891, 41.6488]
+  population = 12000
+
+  [[country.station]]
+  id = "bilbao"
+  name = "Bilbao"
+  coord = [-2.935, 43.263]
+  population = 10000
+
+  [[country.station]]
+  id = "cordoba"
+  name = "Cordoue"
+  coord = [-4.7794, 37.8882]
+  population = 10000
+
+  [[country.station]]
+  id = "cadiz"
+  name = "Cadix"
+  coord = [-6.2885, 36.527]
+  population = 8000
 
   [[country.line]]
   id = "madrid_barcelona"
@@ -432,10 +945,87 @@ demand          = { commuter = 0.8, tourist = 1.5, business = 0.9, freight = 0.9
   max_trains = 8
   opened = 1864
 
+  [[country.line]]
+  id = "barcelona_mataro"
+  name = "Barcelone – Mataró"
+  from = "barcelona"
+  to = "mataro"
+  length_km = 28.0
+  max_trains = 4
+  opened = 1848
+
+  [[country.line]]
+  id = "madrid_aranjuez"
+  name = "Madrid – Aranjuez"
+  from = "madrid"
+  to = "aranjuez"
+  length_km = 49.0
+  max_trains = 4
+  opened = 1851
+
+  [[country.line]]
+  id = "seville_cadiz"
+  name = "Séville – Cadix"
+  from = "seville"
+  to = "cadiz"
+  length_km = 150.0
+  max_trains = 5
+  opened = 1861
+
+  [[country.line]]
+  id = "seville_cordoba"
+  name = "Séville – Cordoue"
+  from = "seville"
+  to = "cordoba"
+  length_km = 130.0
+  max_trains = 5
+  opened = 1859
+
+  [[country.line]]
+  id = "madrid_valencia"
+  name = "Madrid – Valence"
+  from = "madrid"
+  to = "valencia"
+  length_km = 490.0
+  via = [[-1.86, 38.99]]
+  max_trains = 8
+  opened = 1859
+
+  [[country.line]]
+  id = "valencia_barcelona"
+  name = "Valence – Barcelone"
+  from = "valencia"
+  to = "barcelona"
+  length_km = 350.0
+  via = [[1.25, 41.12]]
+  max_trains = 6
+  opened = 1868
+
+  [[country.line]]
+  id = "madrid_zaragoza"
+  name = "Madrid – Saragosse"
+  from = "madrid"
+  to = "zaragoza"
+  length_km = 340.0
+  via = [[-2.6, 41.0]]
+  max_trains = 6
+  opened = 1864
+
+  [[country.line]]
+  id = "zaragoza_bilbao"
+  name = "Saragosse – Bilbao"
+  from = "zaragoza"
+  to = "bilbao"
+  length_km = 300.0
+  via = [[-2.45, 42.46]]
+  max_trains = 6
+  opened = 1863
+
 # ──────────────────────────────── Russie ────────────────────────────────
 
 [[country]]
 id              = "russia"
+start_line      = "petersburg_tsarskoye_selo"
 name            = { fr = "Russie", en = "Russia" }
 gauge_mm        = 1520
 build_cost      = 0.8
@@ -458,6 +1048,54 @@ demand          = { commuter = 0.8, tourist = 0.6, business = 0.9, freight = 1.7
   coord = [30.3351, 59.9343]
   population = 50000
 
+  [[country.station]]
+  id = "tsarskoye_selo"
+  name = "Tsarskoïe Selo"
+  coord = [30.3958, 59.7144]
+  population = 3000
+
+  [[country.station]]
+  id = "peterhof"
+  name = "Peterhof"
+  coord = [29.9086, 59.8803]
+  population = 4000
+
+  [[country.station]]
+  id = "sergiev_posad"
+  name = "Sergiev Possad"
+  coord = [38.1333, 56.3153]
+  population = 5000
+
+  [[country.station]]
+  id = "nizhny_novgorod"
+  name = "Nijni Novgorod"
+  coord = [44.0059, 56.3269]
+  population = 14000
+
+  [[country.station]]
+  id = "tula"
+  name = "Toula"
+  coord = [37.6175, 54.1931]
+  population = 7000
+
+  [[country.station]]
+  id = "smolensk"
+  name = "Smolensk"
+  coord = [32.0453, 54.7826]
+  population = 8000
+
+  [[country.station]]
+  id = "kazan"
+  name = "Kazan"
+  coord = [49.1221, 55.7887]
+  population = 12000
+
+  [[country.station]]
+  id = "yekaterinburg"
+  name = "Iekaterinbourg"
+  coord = [60.6057, 56.8389]
+  population = 14000
+
   [[country.line]]
   id = "moscow_petersburg"
   name = "Moscou – Saint-Pétersbourg"
@@ -478,3 +1116,78 @@ demand          = { commuter = 0.8, tourist = 0.6, business = 0.9, freight = 1.7
   max_trains = 8
   opened = 1871
 
+  [[country.line]]
+  id = "petersburg_tsarskoye_selo"
+  name = "Saint-Pétersbourg – Tsarskoïe Selo"
+  from = "petersburg"
+  to = "tsarskoye_selo"
+  length_km = 25.0
+  max_trains = 4
+  opened = 1837
+
+  [[country.line]]
+  id = "petersburg_peterhof"
+  name = "Saint-Pétersbourg – Peterhof"
+  from = "petersburg"
+  to = "peterhof"
+  length_km = 29.0
+  max_trains = 4
+  opened = 1857
+
+  [[country.line]]
+  id = "moscow_sergiev_posad"
+  name = "Moscou – Sergiev Possad"
+  from = "moscow"
+  to = "sergiev_posad"
+  length_km = 70.0
+  max_trains = 4
+  opened = 1862
+
+  [[country.line]]
+  id = "moscow_tula"
+  name = "Moscou – Toula"
+  from = "moscow"
+  to = "tula"
+  length_km = 190.0
+  max_trains = 6
+  opened = 1868
+
+  [[country.line]]
+  id = "moscow_smolensk"
+  name = "Moscou – Smolensk"
+  from = "moscow"
+  to = "smolensk"
+  length_km = 400.0
+  max_trains = 6
+  opened = 1870
+
+  [[country.line]]
+  id = "moscow_nizhny"
+  name = "Moscou – Nijni Novgorod"
+  from = "moscow"
+  to = "nizhny_novgorod"
+  length_km = 410.0
+  via = [[40.4, 56.13]]
+  max_trains = 8
+  opened = 1862
+
+  [[country.line]]
+  id = "nizhny_kazan"
+  name = "Nijni Novgorod – Kazan"
+  from = "nizhny_novgorod"
+  to = "kazan"
+  length_km = 400.0
+  max_trains = 6
+  opened = 1894
+  era = "steam"
+
+  [[country.line]]
+  id = "kazan_yekaterinburg"
+  name = "Kazan – Iekaterinbourg (vers l'Oural)"
+  from = "kazan"
+  to = "yekaterinburg"
+  length_km = 950.0
+  via = [[56.25, 58.01]]
+  max_trains = 8
+  opened = 1920
+  era = "apogee"

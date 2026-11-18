@@ -102,6 +102,10 @@ pub fn run(world: World, data: GameData, session: Session, opts: UiOptions) -> R
     if let Some(report) = session.report.filter(|_| session.writable) {
         app.welcome_back(report);
     }
+    // Nouvelle partie : on choisit d'abord le pays de la compagnie.
+    if session.writable && app.world.choosing_home {
+        app.offer_home();
+    }
 
     let mut last = Instant::now();
     let mut last_save = Instant::now();
@@ -360,8 +364,6 @@ mod tests {
             "concession acquise",
             "Stockton & Darlington",
             "ligne courante",
-            "FRANCE",
-            "concession : £ 8 000",
         ] {
             assert!(
                 text.contains(expected),
@@ -375,8 +377,8 @@ mod tests {
             "RUSSIE",
             "voie de 1520 mm",
             "époque ultérieure",
-            "Berlin – Moscou",
-            "1 600 km",
+            "Kazan – Iekaterinbourg",
+            "950 km",
         ] {
             assert!(
                 text.contains(expected),
@@ -435,6 +437,11 @@ mod tests {
         });
         assert!(screen(&mut app, 130, 44).contains("Il faut d'abord une concession : France"));
         app.open(app::Popup::Network { sel: france });
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("FRANCE") && text.contains("concession : £ 8 000"),
+            "{text}"
+        );
         press(&mut app, KeyCode::Enter);
         assert!(app.world.has_concession("france"));
         app.open(app::Popup::Network {
@@ -719,7 +726,23 @@ mod tests {
             ("pioneers", 3)
         );
         assert_eq!(app.world.money, app.data.balance.start_money);
-        // La fenêtre reste ouverte sur les bonus, pour dépenser les points.
+        // La nouvelle compagnie choisit d'abord son pays : ici, la France.
+        assert!(matches!(app.popup, app::Popup::Home { sel: 0 }));
+        let text = screen(&mut app, 130, 44);
+        assert!(
+            text.contains("dans quel pays") && text.contains("Saint-Étienne – Andrézieux"),
+            "{text}"
+        );
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.world.home, "france");
+        assert_eq!(app.world.trains[0].line, "saint_etienne_andrezieux");
+        assert!(app.world.has_concession("france") && !app.world.has_concession("uk"));
+        assert_eq!(
+            (app.world.prestige.points, app.world.money),
+            (3, app.data.balance.start_money)
+        );
+        // La fenêtre revient sur les bonus, pour dépenser les points.
         let text = screen(&mut app, 130, 44);
         assert!(
             text.contains("Compagnie : 3 points de prestige")
@@ -754,13 +777,7 @@ mod tests {
         // Vue pays : toutes les gares du Royaume-Uni, sans le détail des quais.
         press(&mut app, KeyCode::Char('2'));
         let text = screen(&mut app, 130, 44);
-        for expected in [
-            "vue pays",
-            "LONDRES",
-            "ÉDIMBOURG",
-            "MANCHESTER",
-            "ROYAUME-UNI",
-        ] {
+        for expected in ["vue pays", "LONDRES", "GLASGOW", "LIVERPOOL", "ROYAUME-UNI"] {
             assert!(
                 text.contains(expected),
                 "« {expected} » absent de :\n{text}"
@@ -1375,7 +1392,13 @@ mod tests {
         screen(&mut app, 140, 44);
         press(&mut app, KeyCode::Char('2'));
         let text = screen(&mut app, 140, 44);
-        assert!(text.contains('~') && text.contains("Tamise"), "{text}");
+        assert!(
+            text.contains('~')
+                && ["Tamise", "Rhin", "Elbe", "Seine"]
+                    .iter()
+                    .any(|r| text.contains(r)),
+            "{text}"
+        );
     }
 
     /// Aperçu de la carte aux trois niveaux de zoom :

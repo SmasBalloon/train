@@ -35,6 +35,7 @@ pub fn draw(app: &App, buf: &mut Buffer, area: Rect) {
         Popup::Enroll { session, sel } => draw_enroll(app, buf, area, session, sel),
         Popup::Event { sel } => draw_event(app, buf, area, sel),
         Popup::Outcome { event, choice } => draw_outcome(app, buf, area, event, choice),
+        Popup::Home { sel } => draw_home(app, buf, area, sel),
         Popup::Welcome => draw_welcome(app, buf, area),
         Popup::Help => draw_help(app, buf, area),
     }
@@ -914,7 +915,7 @@ fn draw_network(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         rows.len(),
         (104, 36),
     );
-    let home_gauge = app.data.home_country().map(|c| c.gauge_mm);
+    let home_gauge = app.world.home_country(&app.data).map(|c| c.gauge_mm);
 
     let lines: Vec<Line> = rows
         .iter()
@@ -1209,6 +1210,128 @@ fn draw_staff(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         buf,
         foot,
         "Entrée : engager    haut/bas : choisir    Échap : fermer",
+    );
+}
+
+// ───────────────────────── Pays de départ ─────────────────────────
+
+fn draw_home(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
+    let t = &app.theme;
+    let countries: Vec<_> = app.data.starting_countries().collect();
+    let start_line =
+        |c: &crate::data::Country| c.start_line.as_deref().and_then(|id| app.data.line(id));
+    let [list, detail, foot] = panel(
+        app,
+        buf,
+        area,
+        "Nouvelle compagnie : dans quel pays la fonder ?",
+        countries.len(),
+        (96, 26),
+    );
+
+    let rows: Vec<Line> = countries
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let line = start_line(c);
+            let text = format!(
+                "{} {:<14} {:<40} {:>6}",
+                cursor(app, i == sel),
+                c.name.fr,
+                line.map_or("", |l| l.name.as_str()),
+                line.map_or(String::new(), |l| format!(
+                    "{} km",
+                    format::int(l.length_km)
+                )),
+            );
+            Line::from(vec![
+                Span::styled(text, row_style(app, i == sel)),
+                Span::styled(format!("  voie {} mm", c.gauge_mm), t.dim),
+            ])
+        })
+        .collect();
+    render_list(buf, list, rows, sel);
+
+    let mut lines = Vec::new();
+    if let Some(c) = countries.get(sel) {
+        lines.push(Line::styled(c.name.fr.clone(), t.title));
+        if let Some(line) = start_line(c) {
+            let city = |id: &str| {
+                app.data
+                    .station(id)
+                    .map_or(id.to_string(), |s| s.name.clone())
+            };
+            lines.push(Line::styled(
+                format!(
+                    "Première ligne : {} ({} km, ouverte en {}), entre {} et {}.",
+                    line.name,
+                    format::int(line.length_km),
+                    line.opened,
+                    city(&line.from),
+                    city(&line.to)
+                ),
+                t.text,
+            ));
+        }
+        lines.push(Line::styled(
+            format!(
+                "Relief : {} (construction × {}).",
+                c.terrain,
+                format::dec2(c.build_cost)
+            ),
+            t.text,
+        ));
+        let demand: Vec<String> = app
+            .data
+            .traffic
+            .iter()
+            .map(|class| {
+                format!(
+                    "{} × {}",
+                    class.name.fr,
+                    format::dec1(c.demand_mult(&class.id))
+                )
+            })
+            .collect();
+        lines.push(Line::styled(
+            format!("Demande : {}.", demand.join(", ")),
+            t.text,
+        ));
+        let others = app
+            .data
+            .countries
+            .iter()
+            .filter(|o| o.gauge_mm != c.gauge_mm)
+            .map(|o| o.name.fr.as_str())
+            .collect::<Vec<_>>();
+        lines.push(Line::styled(
+            if others.is_empty() {
+                format!("Écartement des voies : {} mm, comme partout ailleurs.", c.gauge_mm)
+            } else {
+                format!(
+                    "Écartement des voies : {} mm. Pour s'étendre en {}, il faudra la recherche d'écartement variable.",
+                    c.gauge_mm,
+                    others.join(", ")
+                )
+            },
+            if others.is_empty() { t.good } else { t.warn },
+        ));
+        lines.push(Line::styled(
+            "Le pays de départ est concédé d'office ; les autres pays s'achètent comme concessions.",
+            t.dim,
+        ));
+    }
+    if let Some(msg) = &app.popup_msg {
+        lines.push(Line::styled(msg.clone(), t.warn));
+    }
+    Paragraph::new(lines)
+        .wrap(Wrap { trim: true })
+        .render(detail, buf);
+    footer(
+        app,
+        buf,
+        foot,
+        "Entrée : fonder ici    haut/bas : choisir    Échap : pays proposé",
     );
 }
 

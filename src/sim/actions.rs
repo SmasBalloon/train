@@ -71,6 +71,9 @@ pub enum ActionError {
     WrongRole,
     /// L'équipier est déjà inscrit à une session.
     AlreadyEnrolled,
+    /// La compagnie a déjà choisi son pays : seule une nationalisation permet
+    /// de repartir ailleurs.
+    CompanyFounded,
 }
 
 /// Issue d'une vente ou d'un remplacement : fait sur-le-champ (montant
@@ -149,6 +152,10 @@ impl fmt::Display for ActionError {
             ActionError::TrainingFull => write!(f, "Formation complète"),
             ActionError::WrongRole => write!(f, "Cette formation s'adresse à l'autre métier"),
             ActionError::AlreadyEnrolled => write!(f, "Déjà inscrit à une formation"),
+            ActionError::CompanyFounded => write!(
+                f,
+                "La compagnie est déjà fondée : seule une nationalisation permet de repartir ailleurs"
+            ),
         }
     }
 }
@@ -665,7 +672,7 @@ impl World {
     /// Erreur si l'écartement de l'un de ces pays diffère de celui du pays de
     /// départ sans que la recherche d'écartement variable soit faite.
     fn check_gauge(&self, data: &GameData, countries: &[&Country]) -> Result<(), ActionError> {
-        let home = data.home_country().map(|c| c.gauge_mm);
+        let home = self.home_country(data).map(|c| c.gauge_mm);
         if countries.iter().all(|c| Some(c.gauge_mm) == home) || self.modifiers(data).variable_gauge
         {
             return Ok(());
@@ -821,10 +828,40 @@ impl World {
         prestige.points += gain;
         prestige.earned += gain;
         prestige.resets += 1;
-        *self = World::new(data);
+        let home = self.home.clone();
+        self.refound(data, &home, prestige);
+        // La nouvelle compagnie peut s'installer dans un autre pays.
+        self.choosing_home = true;
+        Ok(gain)
+    }
+
+    /// Repart de zéro dans un pays, en gardant le prestige et ses bonus.
+    fn refound(&mut self, data: &GameData, country_id: &str, prestige: super::world::Prestige) {
+        *self = World::founded_in(data, country_id);
         self.money += prestige.total(data, BonusKind::StartMoney);
         self.prestige = prestige;
-        Ok(gain)
+    }
+
+    /// Fonde la nouvelle compagnie dans ce pays, tant que le choix est ouvert
+    /// (nouvelle partie ou nationalisation) : la partie repart sur sa ligne de départ.
+    pub fn found_company_in(
+        &mut self,
+        data: &GameData,
+        country_id: &str,
+    ) -> Result<(), ActionError> {
+        if !self.choosing_home {
+            return Err(ActionError::CompanyFounded);
+        }
+        let country = data
+            .country(country_id)
+            .filter(|c| c.start_line.is_some())
+            .ok_or(ActionError::UnknownCountry)?;
+        if country.id != self.home {
+            let prestige = std::mem::take(&mut self.prestige);
+            self.refound(data, &country.id, prestige);
+        }
+        self.choosing_home = false;
+        Ok(())
     }
 
     /// Achète un niveau d'un bonus permanent ; renvoie son prix en points.
@@ -1676,6 +1713,68 @@ mod tests {
             short > 0.0 && short < normal * 0.6,
             "{short} contre {normal}"
         );
+    }
+
+    #[test]
+    fn a_company_can_be_founded_in_any_starting_country() {
+        let data = GameData::embedded().unwrap();
+        assert_eq!(data.starting_countries().count(), 5);
+        for country in data.starting_countries() {
+            let mut world = World {
+                choosing_home: true,
+                ..World::new(&data)
+            };
+            world.found_company_in(&data, &country.id).unwrap();
+            let line = country.start_line.as_deref().unwrap();
+            assert_eq!(world.home, country.id);
+            assert_eq!(world.trains.len(), 1);
+            assert_eq!(world.trains[0].line, line);
+            assert!(world.is_built(line));
+            assert_eq!(world.countries.iter().collect::<Vec<_>>(), [&country.id]);
+            // Le choix est fait : plus moyen de déménager sans nationaliser.
+            assert_eq!(
+                world.found_company_in(&data, "uk"),
+                Err(ActionError::CompanyFounded)
+            );
+        }
+    }
+
+    #[test]
+    fn a_broad_gauge_home_needs_variable_gauge_to_go_abroad() {
+        let data = GameData::embedded().unwrap();
+        let mut world = World {
+            choosing_home: true,
+            ..World::new(&data)
+        };
+        world.found_company_in(&data, "spain").unwrap();
+        world.money = 1e9;
+        world.era = "modern".into();
+        let uk = data.country("uk").unwrap();
+        assert!(matches!(
+            world.concession_blocker(&data, uk),
+            Some(ActionError::Locked(_))
+        ));
+        world.research_done.insert("variable_gauge".into());
+        assert_eq!(world.buy_concession(&data, "uk"), Ok(uk.concession_cost));
+    }
+
+    #[test]
+    fn a_new_home_must_connect_its_first_line_to_the_network() {
+        let data = GameData::embedded().unwrap();
+        let mut world = World {
+            choosing_home: true,
+            ..World::new(&data)
+        };
+        world.found_company_in(&data, "france").unwrap();
+        world.money = 1e9;
+        // Paris n'est pas reliée à Saint-Étienne ; Lyon, si.
+        let paris_lille = data.line("paris_lille").unwrap();
+        assert_eq!(
+            world.line_blocker(&data, paris_lille),
+            Some(ActionError::NotConnected)
+        );
+        let lyon = data.line("saint_etienne_lyon").unwrap();
+        assert_eq!(world.line_blocker(&data, lyon), None);
     }
 
     #[test]

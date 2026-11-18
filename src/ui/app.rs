@@ -117,6 +117,11 @@ pub enum Popup {
         event: usize,
         choice: usize,
     },
+    /// Choix du pays où fonder la compagnie (nouvelle partie, nationalisation) :
+    /// `sel` est le rang parmi les pays de départ possibles.
+    Home {
+        sel: usize,
+    },
     /// Résumé de ce qui s'est passé pendant l'absence.
     Welcome,
     Help,
@@ -191,7 +196,7 @@ impl App {
         let line = world
             .trains
             .first()
-            .map_or(data.balance.start_line.clone(), |t| t.line.clone());
+            .map_or(world.start_line(&data).to_string(), |t| t.line.clone());
         App {
             world,
             data,
@@ -245,7 +250,7 @@ impl App {
         if self.world.is_built(&self.line) {
             &self.line
         } else {
-            &self.data.balance.start_line
+            self.world.start_line(&self.data)
         }
     }
 
@@ -344,7 +349,8 @@ impl App {
         let rows = board::rows_per_section(self.size.1);
         let targets = board::targets(self, rows);
         self.board.update(&targets, dt);
-        if !self.paused {
+        // Le temps attend que la compagnie ait choisi son pays.
+        if !self.paused && !matches!(self.popup, Popup::Home { .. }) {
             let events = advance(
                 &mut self.world,
                 &self.data,
@@ -1149,16 +1155,59 @@ impl App {
         }
         match self.world.nationalise(&self.data) {
             Ok(gain) => {
-                self.line = self.data.balance.start_line.clone();
-                self.selected = self.world.trains.first().map(|t| t.id);
+                self.restart_view();
                 self.log.clear();
-                self.fit_camera();
-                self.open(Popup::Company {
-                    sel: 1,
-                    confirm: false,
-                });
+                self.offer_home();
                 self.push_log(
                     format!("Compagnie nationalisée : +{gain} points de prestige. Une nouvelle compagnie voit le jour."),
+                    LogKind::Good,
+                );
+            }
+            Err(e) => self.popup_msg = Some(e.to_string()),
+        }
+    }
+
+    /// Recentre l'interface sur la ligne de départ d'une compagnie toute neuve.
+    fn restart_view(&mut self) {
+        self.line = self.world.start_line(&self.data).to_string();
+        self.selected = self.world.trains.first().map(|t| t.id);
+        self.fit_camera();
+    }
+
+    /// Ouvre le choix du pays de la compagnie, sur son pays actuel.
+    pub fn offer_home(&mut self) {
+        let sel = self
+            .data
+            .starting_countries()
+            .position(|c| c.id == self.world.home)
+            .unwrap_or(0);
+        self.open(Popup::Home { sel });
+    }
+
+    /// Fonde la compagnie dans le pays de rang `sel` parmi les pays de départ.
+    fn found_company(&mut self, sel: usize) {
+        let Some(country) = self.data.starting_countries().nth(sel) else {
+            return;
+        };
+        let (id, name) = (country.id.clone(), country.name.fr.clone());
+        match self.world.found_company_in(&self.data, &id) {
+            Ok(()) => {
+                self.restart_view();
+                // Après une nationalisation, on revient dépenser ses points.
+                if self.world.prestige.resets > 0 {
+                    self.open(Popup::Company {
+                        sel: 1,
+                        confirm: false,
+                    });
+                } else {
+                    self.popup = Popup::None;
+                }
+                let line = self
+                    .data
+                    .line(self.world.start_line(&self.data))
+                    .map_or(String::new(), |l| l.name.clone());
+                self.push_log(
+                    format!("Compagnie fondée : {name}, sur la ligne {line}"),
                     LogKind::Good,
                 );
             }
@@ -1387,6 +1436,23 @@ impl App {
                     self.popup = Popup::None;
                 } else if let Some(sel) = move_selection(code, sel, self.network_rows().len()) {
                     self.open(Popup::Network { sel });
+                }
+            }
+            Popup::Home { sel } => {
+                if confirms {
+                    self.found_company(sel);
+                } else if closes {
+                    // Échap garde le pays proposé d'office.
+                    let current = self
+                        .data
+                        .starting_countries()
+                        .position(|c| c.id == self.world.home)
+                        .unwrap_or(0);
+                    self.found_company(current);
+                } else if let Some(sel) =
+                    move_selection(code, sel, self.data.starting_countries().count())
+                {
+                    self.open(Popup::Home { sel });
                 }
             }
             Popup::Staff { sel } => {

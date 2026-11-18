@@ -485,23 +485,37 @@ impl GameData {
                 }
             }
         }
-        match self.line(&b.start_line) {
-            None => bail!("balance : start_line « {} » inconnue", b.start_line),
-            Some(line) => {
-                if line
-                    .era
-                    .as_ref()
-                    .is_some_and(|e| self.era_index(e) != Some(0))
-                    || self.line_countries(line).len() != 1
-                {
-                    bail!(
-                        "balance : start_line doit être une ligne intérieure, constructible dès le début"
-                    );
-                }
+        match self.country(&b.start_country) {
+            None => bail!("balance : start_country « {} » inconnu", b.start_country),
+            Some(c) if c.start_line.is_none() => {
+                bail!(
+                    "balance : le pays de départ « {} » n'a pas de start_line",
+                    c.id
+                )
+            }
+            Some(_) => {}
+        }
+        for country in &self.countries {
+            let Some(id) = &country.start_line else {
+                continue;
+            };
+            let what = format!("countries.toml : start_line de « {} »", country.id);
+            let Some(line) = self.line(id) else {
+                bail!("{what} : ligne « {id} » inconnue");
+            };
+            let countries = self.line_countries(line);
+            if line
+                .era
+                .as_ref()
+                .is_some_and(|e| self.era_index(e) != Some(0))
+                || countries.len() != 1
+                || countries[0].id != country.id
+            {
+                bail!("{what} : il faut une ligne intérieure au pays, constructible dès le début");
             }
         }
-        // Le gain en variété ne doit pas rendre un pays inaccessible faute de recherche.
-        let home_gauge = self.home_country().map(|c| c.gauge_mm);
+        // Le gain en variété ne doit pas rendre un pays inaccessible faute de
+        // recherche, quel que soit le pays de départ.
         let has_variable_gauge = self
             .research
             .iter()
@@ -510,7 +524,7 @@ impl GameData {
             && self
                 .countries
                 .iter()
-                .any(|c| Some(c.gauge_mm) != home_gauge)
+                .any(|c| c.gauge_mm != self.countries[0].gauge_mm)
         {
             bail!(
                 "research.toml : un pays a un autre écartement, il faut une recherche à effet variable_gauge"

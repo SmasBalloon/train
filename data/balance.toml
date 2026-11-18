@@ -4,7 +4,7 @@
 time_scale            = 60.0    # secondes de jeu par seconde réelle
 start_money           = 50.0
 start_locomotive      = "locomotion_1"
-start_line            = "stockton_darlington"
+start_country         = "uk"      # pays de départ proposé par défaut (voir start_line dans countries.toml)
 
 fare_per_km           = 0.10    # £ par voyageur et par km
 demand_per_1000_per_h = 8.0     # voyageurs par heure pour 1000 habitants (villes moyennes d'une ligne)

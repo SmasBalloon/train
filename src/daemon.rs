@@ -94,10 +94,12 @@ impl Runner {
 /// Boucle du démon, au premier plan : tourne jusqu'à un signal d'arrêt.
 pub fn run(dir: &Path, data: GameData, notifications: bool) -> Result<()> {
     let _lock = SaveLock::acquire(dir)?;
-    let world = match save::load_current(dir, &data)? {
+    let mut world = match save::load_current(dir, &data)? {
         Some((world, _)) => world,
         None => World::new(&data),
     };
+    // Sans joueur pour choisir, la compagnie reste dans son pays actuel.
+    world.choosing_home = false;
     fs::write(pid_path(dir), std::process::id().to_string())
         .with_context(|| format!("écriture de {} impossible", pid_path(dir).display()))?;
 
