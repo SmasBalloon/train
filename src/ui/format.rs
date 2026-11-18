@@ -14,16 +14,16 @@ pub fn int(value: f64) -> String {
     if n < 0 { format!("-{out}") } else { out }
 }
 
-/// Somme d'argent ; les très grands montants sont abrégés : `£ 12,35 M`.
+/// Somme d'argent en euros ; les très grands montants sont abrégés : `12,35 M€`.
 pub fn money(value: f64) -> String {
     let abs = value.abs();
     let sign = if value < 0.0 { "-" } else { "" };
     if abs >= 1e9 {
-        format!("£ {sign}{} Md", dec2(abs / 1e9))
+        format!("{sign}{} Md€", dec2(abs / 1e9))
     } else if abs >= 1e6 {
-        format!("£ {sign}{} M", dec2(abs / 1e6))
+        format!("{sign}{} M€", dec2(abs / 1e6))
     } else {
-        format!("£ {}", int(value.floor()))
+        format!("{} €", int(value.floor()))
     }
 }
 
@@ -84,10 +84,11 @@ mod tests {
         assert_eq!(int(1240.0), "1 240");
         assert_eq!(int(1234567.0), "1 234 567");
         assert_eq!(int(-1500.0), "-1 500");
-        assert_eq!(money(1240.9), "£ 1 240");
-        assert_eq!(money(999_999.0), "£ 999 999");
-        assert_eq!(money(12_345_678.0), "£ 12,35 M");
-        assert_eq!(money(-2.5e9), "£ -2,50 Md");
+        assert_eq!(money(1240.9), "1 240 €");
+        assert_eq!(money(999_999.0), "999 999 €");
+        assert_eq!(money(12_345_678.0), "12,35 M€");
+        assert_eq!(money(-2.5e9), "-2,50 Md€");
+        assert_eq!(money(-5.0), "-5 €");
         assert_eq!(quantity(12.0), "12");
         assert_eq!(quantity(0.46), "0,5");
         assert_eq!(quantity(1240.4), "1 240");

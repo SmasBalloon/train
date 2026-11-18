@@ -43,7 +43,7 @@ era      = "steam"
 research = ["sleeping_cars"]
 
   [[event.choice]]
-  label   = { fr = "En grande pompe : presse, ministres et dîner à bord (£ 150 000)" }
+  label   = { fr = "En grande pompe : presse, ministres et dîner à bord (150 000 €)" }
   outcome = { fr = "Les journaux ne parlent que de ton train. La clientèle fortunée afflue, et le voyage devient une fin en soi." }
   effects = [{ kind = "money", value = -150000.0 }, { kind = "satisfaction", class = "tourist", value = 0.30 }, { kind = "satisfaction", class = "business", value = 0.20 }]
 

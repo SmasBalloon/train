@@ -2336,7 +2336,7 @@ fn draw_manage(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
                     class.name.fr,
                     format::percent(class.share),
                     format::dec1(demand),
-                    format!("£ {}", format::dec2(ticket)),
+                    format!("{} €", format::dec2(ticket)),
                 ),
                 t.text,
             ),

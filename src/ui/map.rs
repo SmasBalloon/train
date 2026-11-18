@@ -55,7 +55,7 @@ pub fn ascii_fold(ch: char) -> char {
         'Ç' => 'C',
         '°' => 'o',
         '×' => 'x',
-        '£' => 'L',
+        '€' => 'E',
         '’' => '\'',
         '«' | '»' => '"',
         _ => '?',
@@ -819,7 +819,7 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
         sep.clone(),
         (
             format!(
-                "{}£ {}/s",
+                "{}{} €/s",
                 if income > -0.05 { "+" } else { "-" },
                 format::dec1(income.abs())
             ),

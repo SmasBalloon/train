@@ -203,7 +203,7 @@ mod balance {
         data.events.clear();
         println!(
             "{:<30} {:>4} {:>6} {:>7} {:>6} {:>12} {:>12} {:>9}",
-            "machine", "n", "km/h", "trajets", "charge", "net £/s", "prix", "retour"
+            "machine", "n", "km/h", "trajets", "charge", "net €/s", "prix", "retour"
         );
         for (rank, era) in data.eras.iter().enumerate() {
             let research: Vec<&str> = data
@@ -371,7 +371,7 @@ mod balance {
                 .map(|r| r.cost)
                 .sum();
             println!(
-                "{:<28} lignes {:>2} trains {:>3} | net {:>12.0} £/s | voy./h {:>8.0} | lignes {:>12.0} amél. {:>14.0} trains {:>13.0} rech. {:>12.0} entrée {:>11.0} | satisf. {:.2}",
+                "{:<28} lignes {:>2} trains {:>3} | net {:>12.0} €/s | voy./h {:>8.0} | lignes {:>12.0} amél. {:>14.0} trains {:>13.0} rech. {:>12.0} entrée {:>11.0} | satisf. {:.2}",
                 era.name.fr,
                 built.len(),
                 world.trains.len(),

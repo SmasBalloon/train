@@ -6,7 +6,7 @@ start_money           = 50.0
 start_locomotive      = "locomotion_1"
 start_country         = "uk"      # pays de départ proposé par défaut (voir start_line dans countries.toml)
 
-fare_per_km           = 0.10    # £ par voyageur et par km
+fare_per_km           = 0.10    # € par voyageur et par km
 demand_per_1000_per_h = 8.0     # voyageurs par heure pour 1000 habitants (villes moyennes d'une ligne)
 demand_ref_km         = 19.0    # longueur de ligne pour laquelle la demande vaut cette base
 demand_distance_exp   = 1.0     # la demande d'une ligne décroît en (référence / longueur)^exposant
@@ -49,4 +49,4 @@ offline_efficiency    = 0.5     # part du temps d'absence réellement simulée
 wear_per_train_km     = 0.00015 # perte d'état de la voie par train-km
 wear_slow_threshold   = 0.7     # en dessous, les trains ralentissent
 wear_min_speed_factor = 0.5     # facteur de vitesse sur une voie à 0 %
-repair_cost_per_km    = 20.0    # £ par km pour une remise à neuf complète
+repair_cost_per_km    = 20.0    # € par km pour une remise à neuf complète

@@ -570,7 +570,7 @@ impl World {
         hour_minute(self.clock)
     }
 
-    /// Revenu net moyen récent, en £ par seconde de jeu.
+    /// Revenu net moyen récent, en € par seconde de jeu.
     pub fn income_per_game_second(&self) -> f64 {
         self.income_recent / INCOME_TAU
     }

@@ -953,7 +953,7 @@ mod tests {
         // Prochain départ prévu 20 minutes après l'arrivée.
         assert!((train.sched_departure - (world.clock + 1200.0)).abs() <= 30.0);
 
-        // Recette, moins l'entretien pendant la marche et le charbon : 12 kg par km à £ 12 la tonne.
+        // Recette, moins l'entretien pendant la marche et le charbon : 12 kg par km à 12 € la tonne.
         let running_s = (trip_s / MAX_STEP).ceil() * MAX_STEP;
         let costs = 2.0 * running_s / 3600.0 + 19.0 * 0.012 * 12.0;
         assert!(

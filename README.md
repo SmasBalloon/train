@@ -2,7 +2,7 @@
 
 Jeu incrémental de réseau ferroviaire **dans le terminal**, de 1825 à demain.
 
-Tu démarres avec une ligne, une locomotive et 50 £, à l'aube du chemin de fer :
+Tu démarres avec une ligne, une locomotive et 50 €, à l'aube du chemin de fer :
 choisis ton pays (la Stockton & Darlington au Royaume-Uni, Saint-Étienne –
 Andrézieux en France, Nuremberg – Fürth en Allemagne, Barcelone – Mataró en
 Espagne ou Saint-Pétersbourg – Tsarskoïe Selo en Russie). Recrute un conducteur, transporte des voyageurs,

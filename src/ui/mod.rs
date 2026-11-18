@@ -60,7 +60,7 @@ pub fn status_line(world: &World, data: &GameData, ascii: bool) -> String {
     let income = world.income_per_game_second() * data.balance.time_scale;
     let moving = world.trains_moving();
     let text = format!(
-        "{} │ {moving} train{} en route │ {}£ {}/s",
+        "{} │ {moving} train{} en route │ {}{} €/s",
         format::money(world.money),
         if moving > 1 { "s" } else { "" },
         if income > -0.05 { "+" } else { "-" },
@@ -228,7 +228,7 @@ mod tests {
             "STOCKTON",
             "DARLINGTON",
             "Locomotion n°1 #1",
-            "£ 50",
+            "50 €",
             "Trains 1/4",
             "Tees",
         ] {
@@ -254,7 +254,7 @@ mod tests {
         assert!(stray.is_empty(), "caractères non ASCII : {stray:?}");
         assert!(text.contains('='), "pas de voie dessinée");
         assert!(
-            text.contains("| L 4") && text.contains("Locomotion no1 #1"),
+            text.contains("| 49 E |") && text.contains("Locomotion no1 #1"),
             "{text}"
         );
         for popup in [
@@ -392,7 +392,7 @@ mod tests {
         press(&mut app, KeyCode::Down);
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("à construire : £ 3 500") && text.contains("Darlington → York"),
+            text.contains("à construire : 3 500 €") && text.contains("Darlington → York"),
             "{text}"
         );
         press(&mut app, KeyCode::Enter);
@@ -439,7 +439,7 @@ mod tests {
         app.open(app::Popup::Network { sel: france });
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("FRANCE") && text.contains("concession : £ 8 000"),
+            text.contains("FRANCE") && text.contains("concession : 8 000 €"),
             "{text}"
         );
         press(&mut app, KeyCode::Enter);
@@ -510,7 +510,7 @@ mod tests {
         press(&mut app, KeyCode::Left);
         let text = screen(&mut app, 130, 44);
         assert!(
-            text.contains("Dépôt : 2 locomotives") && text.contains("Commande : 2 × £ 400 = £ 800"),
+            text.contains("Dépôt : 2 locomotives") && text.contains("Commande : 2 × 400 € = 800 €"),
             "{text}"
         );
         press(&mut app, KeyCode::Enter);
@@ -555,7 +555,8 @@ mod tests {
             "Conduite",
             "Douceur",
             "prime offerte",
-            "prime £",
+            "prime ",
+            " €",
             "★",
         ] {
             assert!(
@@ -987,7 +988,7 @@ mod tests {
             "Pour y entrer",
             "Recherche : Signaleurs de voie",
             "0 / 15 000",
-            "Investissement : £ 40 000",
+            "Investissement : 40 000 €",
         ] {
             assert!(
                 text.contains(expected),
@@ -1027,7 +1028,7 @@ mod tests {
         let text = screen(&mut app, 120, 40);
         assert!(
             text.contains("Rails en acier")
-                && text.contains("£ 7 600")
+                && text.contains("7 600 €")
                 && text.contains("disponible"),
             "{text}"
         );
@@ -1144,7 +1145,7 @@ mod tests {
         press(&mut app, KeyCode::Enter);
         let text = screen(&mut app, 120, 40);
         assert!(
-            text.contains("+£ 500")
+            text.contains("+500 €")
                 && text.contains("Recherche offerte : Chaudière multitubulaire"),
             "{text}"
         );
@@ -1293,7 +1294,7 @@ mod tests {
             "Pendant ton absence",
             "Tu es parti 2 h 00",
             "trajets",
-            "Trésorerie : +£",
+            "Trésorerie : +",
         ] {
             assert!(
                 text.contains(expected),
@@ -1333,15 +1334,15 @@ mod tests {
         world.money = 1240.7;
         assert_eq!(
             status_line(&world, &data, false),
-            "£ 1 240 │ 0 train en route │ +£ 0,0/s"
+            "1 240 € │ 0 train en route │ +0,0 €/s"
         );
         world.dispatch(&data, 1).unwrap();
         crate::sim::advance(&mut world, &data, 2400.0);
         let line = status_line(&world, &data, true);
         assert!(
-            line.starts_with("L 1 2")
+            line.starts_with("1 2")
                 && line.contains("| 1 train en route | ")
-                && line.ends_with("L 0,0/s"),
+                && line.ends_with("0,0 E/s"),
             "{line}"
         );
         assert!(line.is_ascii() && !line.contains('\n'));

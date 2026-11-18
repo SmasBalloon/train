@@ -97,7 +97,7 @@ impl fmt::Display for ActionError {
             ActionError::WrongEra(name) => write!(f, "Pas avant l'époque : {name}"),
             ActionError::NeedsUpgrade(name) => write!(f, "La ligne doit d'abord recevoir : {name}"),
             ActionError::NotEnoughMoney { needed } => {
-                write!(f, "Pas assez d'argent (il faut £ {})", needed.ceil())
+                write!(f, "Pas assez d'argent (il faut {} €)", needed.ceil())
             }
             ActionError::LineFull => write!(f, "La ligne ne peut pas accueillir plus de trains"),
             ActionError::NotAtStation => write!(f, "Ce train est en route"),
@@ -1420,7 +1420,7 @@ mod tests {
             Err(ActionError::NothingToRepair)
         );
         world.lines.get_mut(LINE).unwrap().condition = 0.5;
-        // Moitié de 19 km à £ 20 le km.
+        // Moitié de 19 km à 20 € le km.
         assert_eq!(world.repair_cost(&data, LINE), Some(190.0));
         assert!(matches!(
             world.repair_line(&data, LINE),
@@ -1489,7 +1489,7 @@ mod tests {
             world.buy_upgrade(&data, LINE, "heavy_track"),
             Err(ActionError::NeedsUpgrade("Rails en acier".into()))
         );
-        // 19 km à £ 400 le km.
+        // 19 km à 400 € le km.
         assert_eq!(world.buy_upgrade(&data, LINE, "steel_rails"), Ok(7600.0));
         assert_eq!(
             world.buy_upgrade(&data, LINE, "steel_rails"),
@@ -1516,7 +1516,7 @@ mod tests {
             world.build_line(&data, "york_leeds"),
             Err(ActionError::NotConnected)
         );
-        // 70 km à £ 50 le km.
+        // 70 km à 50 € le km.
         assert_eq!(world.build_line(&data, "darlington_york"), Ok(3500.0));
         assert_eq!(
             world.build_line(&data, "darlington_york"),
@@ -1552,7 +1552,7 @@ mod tests {
             world.build_line(&data, "lyon_marseille"),
             Err(ActionError::NotConnected)
         );
-        // Relief français : 430 km × £ 50 × 1,1.
+        // Relief français : 430 km × 50 € × 1,1.
         let cost = world.build_line(&data, "paris_lyon").unwrap();
         assert!((cost - 430.0 * 50.0 * 1.1).abs() < 1e-6, "{cost}");
         assert!(world.build_line(&data, "lyon_marseille").is_ok());
@@ -1623,7 +1623,7 @@ mod tests {
         );
         assert_eq!(world.hire(&data, "nope"), Err(ActionError::UnknownStaff));
 
-        // Aucun train ne roule : seule la paie sort de la caisse, £ 15 par heure de jeu.
+        // Aucun train ne roule : seule la paie sort de la caisse, 15 € par heure de jeu.
         let before = world.money;
         advance(&mut world, &data, 10.0 * 3600.0);
         assert!(
