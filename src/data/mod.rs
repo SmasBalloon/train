@@ -80,6 +80,10 @@ pub struct Balance {
     pub satisfaction_inertia: f64,
     pub offline_max_h: f64,
     pub offline_efficiency: f64,
+    /// Minutes réelles sans action au clavier ou à la souris avant d'être inactif.
+    pub idle_after_min: f64,
+    /// Part des recettes conservée tant que le joueur est inactif.
+    pub idle_revenue: f64,
     pub prestige_points: u32,
     pub wear_per_train_km: f64,
     pub wear_slow_threshold: f64,

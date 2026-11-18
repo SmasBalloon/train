@@ -870,9 +870,18 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
     put_spans(buf, area, area.x as i32, area.y as i32, &spans);
 
     // Recherche en cours : calée à droite, pour rester visible quelle que soit la largeur.
+    let badge = if app.read_only {
+        Some(" LECTURE SEULE ")
+    } else if app.paused {
+        Some(" PAUSE ")
+    } else if app.world.idle {
+        Some(" INACTIF : RECETTES RÉDUITES ")
+    } else {
+        None
+    };
     let mut right = area.right() as i32;
-    if app.paused || app.read_only {
-        right -= if app.read_only { 15 } else { 7 };
+    if let Some(text) = badge {
+        right -= text.chars().count() as i32;
     }
     if let Some((research, progress, left_s)) = app.research_progress() {
         let text = format!(
@@ -892,12 +901,7 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
         );
     }
 
-    if app.paused || app.read_only {
-        let text = if app.read_only {
-            " LECTURE SEULE "
-        } else {
-            " PAUSE "
-        };
+    if let Some(text) = badge {
         put_str(
             buf,
             area,

@@ -56,24 +56,18 @@ crachant sa fumée. N'importe quelle touche l'interrompt (et agit normalement).
 `S` (majuscule) l'active ou la coupe ; le choix est retenu dans
 `settings.json`, à côté de la sauvegarde.
 
-### Jouer en arrière-plan
-
-```sh
-rail daemon start     # le réseau tourne en arrière-plan, avec notifications de bureau
-rail daemon status
-rail daemon stop      # dernière sauvegarde, puis rend la main
-rail daemon run       # au premier plan (systemd, ou pour voir une erreur)
-```
-
-Pendant que le démon tourne, `rail` ouvre la partie en **lecture seule**.
-Ajoute `--no-notify` pour couper les notifications (`notify-send` sous Linux,
-`osascript` sous macOS).
+Si la partie est déjà ouverte dans une autre fenêtre, `rail` l'ouvre en
+**lecture seule**.
 
 ### Absence
 
 Le jeu avance aussi quand il est fermé : à la réouverture, l'absence est
-rattrapée (jusqu'à 8 h réelles, à 50 % d'efficacité par défaut) et un résumé
+rattrapée (jusqu'à 8 h réelles, à 30 % d'efficacité par défaut) et un résumé
 s'affiche. Une seconde réelle vaut une minute de jeu.
+
+Une partie laissée ouverte sans y toucher (ni clavier ni souris) pendant
+30 minutes passe **inactive** : les recettes des trajets tombent à 30 %
+jusqu'à la prochaine action.
 
 ## Commandes
 

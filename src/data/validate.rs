@@ -461,6 +461,8 @@ impl GameData {
         }
         ratio("balance : base_comfort", b.base_comfort)?;
         ratio("balance : offline_efficiency", b.offline_efficiency)?;
+        ratio("balance : idle_revenue", b.idle_revenue)?;
+        positive("balance : idle_after_min", b.idle_after_min)?;
         ratio("balance : resale_ratio", b.resale_ratio)?;
         for (name, v) in [
             ("wear_slow_threshold", b.wear_slow_threshold),

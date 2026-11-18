@@ -338,7 +338,7 @@ mod tests {
 
         let (current, report) = load_current(&dir, &data).unwrap().unwrap();
         assert!((3600.0..3605.0).contains(&report.away_s));
-        assert!(report.trips > 20 && current.money > world.money);
+        assert!(report.trips > 12 && current.money > world.money);
         fs::remove_dir_all(&dir).unwrap();
     }
 

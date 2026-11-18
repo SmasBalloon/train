@@ -173,6 +173,8 @@ pub struct App {
     pub offline: Option<OfflineReport>,
     /// Secondes réelles écoulées depuis le lancement (animations, journal).
     pub time: f64,
+    /// Instant (`time`) de la dernière touche ou action de souris.
+    last_input: f64,
     size: (u16, u16),
     drag: Option<(u16, u16)>,
     paths: HashMap<String, Polyline>,
@@ -222,6 +224,7 @@ impl App {
             read_only: false,
             offline: None,
             time: 0.0,
+            last_input: 0.0,
             size: (80, 24),
             drag: None,
             paths,
@@ -346,6 +349,7 @@ impl App {
     /// Avance la partie de `dt` secondes réelles.
     pub fn update(&mut self, dt: f64) {
         self.time += dt;
+        self.check_idle();
         let rows = board::rows_per_section(self.size.1);
         let targets = board::targets(self, rows);
         self.board.update(&targets, dt);
@@ -1307,7 +1311,35 @@ impl App {
 
     // ----- Entrées -----
 
+    /// Passe la partie en inactif après un long moment sans action du joueur
+    /// (recettes réduites), et la rétablit à la première action.
+    fn check_idle(&mut self) {
+        let b = &self.data.balance;
+        let idle = self.time - self.last_input >= b.idle_after_min * 60.0;
+        if idle == self.world.idle {
+            return;
+        }
+        self.world.idle = idle;
+        if self.read_only {
+            return;
+        }
+        if idle {
+            let text = format!(
+                "Inactif depuis {} min : les recettes tombent à {}",
+                b.idle_after_min.round(),
+                format::percent(b.idle_revenue)
+            );
+            self.push_log(text, LogKind::Warn);
+        } else {
+            self.push_log("De retour : les recettes sont rétablies", LogKind::Good);
+        }
+    }
+
     pub fn on_event(&mut self, event: Event) {
+        if matches!(event, Event::Key(_) | Event::Mouse(_)) {
+            self.last_input = self.time;
+            self.check_idle();
+        }
         let (was_map, screen) = (self.popup == Popup::None, self.screen);
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {

@@ -1963,9 +1963,9 @@ mod tests {
             "la recherche va 20 % plus vite"
         );
 
-        // Hors ligne : 60 % au lieu de 50 %.
+        // Hors ligne : 40 % au lieu de 30 %.
         let report = crate::sim::catch_up(&mut world.clone(), &data, 1000.0);
-        assert!((report.simulated_s - 600.0).abs() < 1e-9);
+        assert!((report.simulated_s - 400.0).abs() < 1e-9);
 
         // Le capital de départ suit à la prochaine nationalisation, et les niveaux restent.
         world

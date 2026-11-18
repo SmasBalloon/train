@@ -95,7 +95,7 @@ pub fn run(world: World, data: GameData, session: Session, opts: UiOptions) -> R
     app.open(session.popup);
     if app.read_only {
         app.push_log(
-            "Une autre instance fait tourner la partie : lecture seule (rail daemon stop pour reprendre la main)",
+            "Une autre fenêtre fait tourner la partie : lecture seule (ferme-la pour reprendre la main)",
             app::LogKind::Warn,
         );
     }
@@ -217,6 +217,19 @@ mod tests {
 
     fn press(app: &mut App, code: KeyCode) {
         app.on_event(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+    }
+
+    #[test]
+    fn thirty_minutes_without_input_cut_the_revenue() {
+        let mut app = app(false, ColorMode::Color);
+        app.update(29.0 * 60.0);
+        assert!(!app.world.idle);
+        app.update(61.0);
+        assert!(app.world.idle);
+        assert!(screen(&mut app, 120, 40).contains("INACTIF"));
+        press(&mut app, KeyCode::F(12));
+        assert!(!app.world.idle);
+        assert!(!screen(&mut app, 120, 40).contains("INACTIF"));
     }
 
     #[test]

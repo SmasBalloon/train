@@ -225,6 +225,10 @@ pub struct World {
     /// Revenus nets récents, amortis exponentiellement.
     #[serde(default)]
     pub income_recent: f64,
+    /// Vrai quand la partie est ouverte mais que le joueur n'y touche plus :
+    /// les recettes sont réduites. Jamais sauvegardé.
+    #[serde(skip)]
+    pub idle: bool,
     /// Satisfaction par catégorie de trafic, de 0 à 1 (0,5 = neutre).
     #[serde(default)]
     pub satisfaction: BTreeMap<String, f64>,
@@ -309,6 +313,7 @@ impl World {
             research_done: BTreeSet::new(),
             research_active: None,
             income_recent: 0.0,
+            idle: false,
             satisfaction: BTreeMap::new(),
             era: String::new(),
             era_started: 0.0,

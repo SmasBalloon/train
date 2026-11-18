@@ -438,6 +438,8 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
         .filter(|f| world.is_out_of_fuel(data, &f.id))
         .map(|f| f.id.clone())
         .collect();
+    // Joueur inactif devant la partie : seule une part des recettes est encaissée.
+    let idle_mult = if world.idle { b.idle_revenue } else { 1.0 };
     let mut net = 0.0;
     let mut gross = 0.0;
     let mut carried = 0u64;
@@ -612,7 +614,8 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                             * m.fare
                             * class.fare_mult
                             * fare_level
-                            * collected;
+                            * collected
+                            * idle_mult;
                         if let (Some(score), Some(mood)) = (
                             trip_score(class, comfort, punctuality, train.crowding),
                             world.satisfaction.get_mut(class_id),
@@ -1457,6 +1460,20 @@ mod tests {
         advance_with_step(&mut coarse, &data, 48.0 * 3600.0, 60.0);
         let gap = (fine.lifetime_income - coarse.lifetime_income).abs() / fine.lifetime_income;
         assert!(gap < 0.08, "écart de recettes de {:.1} %", gap * 100.0);
+    }
+
+    #[test]
+    fn an_idle_player_keeps_30_percent_of_the_revenue() {
+        let (mut active, data) = setup();
+        active.research_done.insert("hand_signals".into());
+        let mut idle = active.clone();
+        idle.idle = true;
+        advance(&mut active, &data, 24.0 * 3600.0);
+        advance(&mut idle, &data, 24.0 * 3600.0);
+        assert!(active.lifetime_income > 0.0);
+        let ratio = idle.lifetime_income / active.lifetime_income;
+        assert!((ratio - 0.30).abs() < 1e-6, "ratio {ratio}");
+        assert_eq!(idle.passengers_carried, active.passengers_carried);
     }
 
     #[test]

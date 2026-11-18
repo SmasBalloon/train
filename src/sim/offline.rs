@@ -111,10 +111,10 @@ mod tests {
         let report = catch_up(&mut world, &data, 3600.0);
 
         assert_eq!(report.away_s, 3600.0);
-        assert_eq!(report.simulated_s, 1800.0, "efficacité hors ligne de 50 %");
-        // 1800 s réelles à l'échelle 60.
-        assert!((world.clock - before.clock - 108_000.0).abs() < 1e-6);
-        assert!(report.trips > 20 && report.carried > 500, "{report:?}");
+        assert_eq!(report.simulated_s, 1080.0, "efficacité hors ligne de 30 %");
+        // 1080 s réelles à l'échelle 60.
+        assert!((world.clock - before.clock - 64_800.0).abs() < 1e-6);
+        assert!(report.trips > 12 && report.carried > 300, "{report:?}");
         assert!(report.net > 0.0 && report.revenue > report.net);
         assert!((world.money - before.money - report.net).abs() < 1e-9);
         assert_eq!(world.trips, report.trips);
@@ -146,7 +146,7 @@ mod tests {
         let (mut world, data) = setup();
         world.money = 1000.0;
         world.start_research(&data, "hand_signals").unwrap();
-        let report = catch_up(&mut world, &data, 600.0);
+        let report = catch_up(&mut world, &data, 1000.0);
         assert_eq!(report.research_done, vec!["hand_signals".to_string()]);
         assert!(world.research_done.contains("hand_signals"));
     }

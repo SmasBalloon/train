@@ -4,7 +4,6 @@ use std::process::ExitCode;
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 
-use rainhill::daemon;
 use rainhill::data::GameData;
 use rainhill::save::{self, SaveLock};
 use rainhill::sim::World;
@@ -51,28 +50,8 @@ enum Command {
     Fleet,
     /// Arbre de recherche
     Research,
-    /// Améliorations de la ligne
+    /// Améliorations du réseau
     Upgrade,
-    /// Fait tourner la partie en arrière-plan, avec notifications de bureau
-    Daemon {
-        #[command(subcommand)]
-        action: Option<DaemonAction>,
-        /// N'envoie aucune notification de bureau
-        #[arg(long, global = true)]
-        no_notify: bool,
-    },
-}
-
-#[derive(Subcommand, Clone, Copy)]
-enum DaemonAction {
-    /// Lance le démon en arrière-plan (par défaut)
-    Start,
-    /// Arrête le démon après une dernière sauvegarde
-    Stop,
-    /// Indique si le démon tourne
-    Status,
-    /// Fait tourner le démon au premier plan (pour systemd, ou pour voir une erreur)
-    Run,
 }
 
 /// Vrai si la locale annonce de l'UTF-8 (toujours vrai hors Unix).
@@ -90,15 +69,15 @@ fn locale_is_utf8() -> bool {
         })
 }
 
-/// Ouvre l'interface sur l'écran demandé. Si une autre instance (le démon, par
-/// exemple) fait déjà tourner la partie, elle s'ouvre en lecture seule.
+/// Ouvre l'interface sur l'écran demandé. Si une autre fenêtre fait déjà
+/// tourner la partie, elle s'ouvre en lecture seule.
 fn interactive(cli: &Cli, screen: Screen, popup: Popup) -> Result<()> {
     if !std::io::stdout().is_terminal() {
         bail!("rail a besoin d'un terminal interactif (essaie `rail status` pour un script)");
     }
     let dir = save::data_dir()?;
     let data = GameData::load(Some(&dir.join("mods")))?;
-    // Si le démon (ou une autre fenêtre) tient déjà la partie, on l'observe sans l'écrire.
+    // Si une autre fenêtre tient déjà la partie, on l'observe sans l'écrire.
     let lock = SaveLock::acquire(&dir).ok();
     let writable = lock.is_some();
     // Une fenêtre d'action n'a pas de sens en lecture seule.
@@ -162,41 +141,6 @@ fn status(cli: &Cli) -> Result<()> {
     }
 }
 
-fn daemon(action: DaemonAction, notifications: bool) -> Result<()> {
-    let dir = save::data_dir()?;
-    match action {
-        DaemonAction::Start => {
-            // Les données sont validées ici, pour afficher l'erreur dans le terminal.
-            GameData::load(Some(&dir.join("mods")))?;
-            let pid = daemon::start(&dir, notifications)?;
-            println!("Le réseau tourne en arrière-plan (processus {pid}).");
-            println!(
-                "`rail` ouvre la partie en lecture seule ; `rail daemon stop` te rend la main."
-            );
-            Ok(())
-        }
-        DaemonAction::Stop => {
-            if daemon::stop(&dir)? {
-                println!("Démon arrêté, partie sauvegardée.");
-            } else {
-                println!("Le démon ne tournait pas.");
-            }
-            Ok(())
-        }
-        DaemonAction::Status => {
-            match daemon::running(&dir) {
-                Some(pid) => println!("Le démon tourne (processus {pid})."),
-                None => println!("Le démon ne tourne pas."),
-            }
-            Ok(())
-        }
-        DaemonAction::Run => {
-            let data = GameData::load(Some(&dir.join("mods")))?;
-            daemon::run(&dir, data, notifications)
-        }
-    }
-}
-
 fn run(cli: Cli) -> Result<()> {
     let research = Popup::Research {
         sel: 0,
@@ -210,9 +154,6 @@ fn run(cli: Cli) -> Result<()> {
         Command::Research => interactive(&cli, Screen::Map, research),
         Command::Upgrade => interactive(&cli, Screen::Map, Popup::Upgrades { sel: 0 }),
         Command::Status => status(&cli),
-        Command::Daemon { action, no_notify } => {
-            daemon(action.unwrap_or(DaemonAction::Start), !no_notify)
-        }
     }
 }
 
