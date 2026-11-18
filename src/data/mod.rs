@@ -323,7 +323,10 @@ pub struct CrewNames {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CrewRules {
-    pub candidates_per_day: u32,
+    /// Candidats proposés à chaque arrivage.
+    pub candidates_per_batch: u32,
+    /// Minutes réelles entre deux arrivages de candidats.
+    pub candidates_every_min: f64,
     pub base_wage: f64,
     pub skill_wage: f64,
     pub hire_fee_hours: f64,

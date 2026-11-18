@@ -386,6 +386,7 @@ impl GameData {
         non_negative("crew : base_wage", c.base_wage)?;
         non_negative("crew : skill_wage", c.skill_wage)?;
         non_negative("crew : hire_fee_hours", c.hire_fee_hours)?;
+        positive("crew : candidates_every_min", c.candidates_every_min)?;
         non_negative("crew : xp_per_km", c.xp_per_km)?;
         non_negative("crew : training_cost", c.training_cost)?;
         non_negative("crew : training_cost_growth", c.training_cost_growth)?;

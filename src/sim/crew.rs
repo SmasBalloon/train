@@ -122,7 +122,7 @@ impl TrainCrew {
     }
 }
 
-/// Générateur déterministe (SplitMix64) : mêmes candidats pour un même jour.
+/// Générateur déterministe (SplitMix64) : mêmes candidats pour un même arrivage.
 fn next(seed: &mut u64) -> f64 {
     *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let mut z = *seed;
@@ -160,16 +160,32 @@ impl World {
         self.wage_of(data, member) * data.crew.hire_fee_hours
     }
 
-    /// Renouvelle la liste des candidats si le jour a changé.
+    /// Secondes de jeu entre deux arrivages de candidats.
+    fn candidates_period(data: &GameData) -> f64 {
+        data.crew.candidates_every_min * 60.0 * data.balance.time_scale
+    }
+
+    /// Numéro de l'arrivage de candidats en cours (le premier vaut 1).
+    pub fn candidates_batch_now(&self, data: &GameData) -> u64 {
+        (self.clock.max(0.0) / Self::candidates_period(data)) as u64 + 1
+    }
+
+    /// Secondes réelles avant le prochain arrivage de candidats.
+    pub fn next_candidates_in(&self, data: &GameData) -> f64 {
+        let period = Self::candidates_period(data);
+        (period - self.clock.max(0.0).rem_euclid(period)) / data.balance.time_scale
+    }
+
+    /// Renouvelle la liste des candidats à chaque nouvel arrivage.
     pub(crate) fn refresh_candidates(&mut self, data: &GameData) {
-        let day = self.day();
-        if self.candidates_day == day {
+        let batch = self.candidates_batch_now(data);
+        if self.candidates_batch == batch {
             return;
         }
-        self.candidates_day = day;
+        self.candidates_batch = batch;
         let mut seed =
-            day.wrapping_mul(0xA24B_AED4_963E_E407) ^ ((self.prestige.resets as u64) << 48);
-        self.candidates = (0..data.crew.candidates_per_day)
+            batch.wrapping_mul(0xA24B_AED4_963E_E407) ^ ((self.prestige.resets as u64) << 48);
+        self.candidates = (0..data.crew.candidates_per_batch)
             .map(|i| {
                 let role = if i % 2 == 0 {
                     CrewRole::Driver
@@ -611,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn candidates_are_the_same_for_a_given_day_and_change_the_next() {
+    fn candidates_are_the_same_for_a_given_batch_and_change_the_next() {
         let (world, data) = setup();
         let (other, _) = setup();
         assert_eq!(world.candidates.len(), 4);
@@ -626,9 +642,12 @@ mod tests {
             assert!(c.skills.iter().all(|s| (0.1..=1.0).contains(s)), "{c:?}");
             assert!(c.name.contains(' ') && c.train.is_none());
         }
+        // Un arrivage toutes les 5 minutes réelles.
+        let period = 5.0 * 60.0 * data.balance.time_scale;
         let mut later = world.clone();
-        advance(&mut later, &data, 86_400.0);
+        advance(&mut later, &data, period);
         assert_ne!(later.candidates, world.candidates);
+        assert_eq!(later.candidates.len(), 4);
     }
 
     #[test]

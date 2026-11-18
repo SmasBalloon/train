@@ -783,7 +783,10 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
             ),
             t.hud.patch(t.title),
         ),
-        (format!("  {hour:02}:{minute:02}"), t.hud),
+        (
+            format!("  Jour {}  {hour:02}:{minute:02}", app.world.day()),
+            t.hud,
+        ),
         sep.clone(),
         (format::money(app.world.money), t.hud.patch(t.money)),
         sep.clone(),
@@ -826,6 +829,16 @@ fn draw_top_bar(app: &App, buf: &mut Buffer, area: Rect) {
                 t.hud.patch(style),
             ));
         }
+    }
+    // Sur un terminal étroit, le jour passe en forme courte pour laisser la
+    // place aux stocks de combustible.
+    let width: usize = spans.iter().map(|(text, _)| text.chars().count()).sum();
+    if width > area.width as usize
+        && let Some(clock) = spans
+            .iter_mut()
+            .find(|(text, _)| text.starts_with("  Jour "))
+    {
+        clock.0 = format!(" J{} {hour:02}:{minute:02}", app.world.day());
     }
     put_spans(buf, area, area.x as i32, area.y as i32, &spans);
 

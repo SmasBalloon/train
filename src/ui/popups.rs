@@ -1386,7 +1386,11 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
             recruiting,
         ),
         Span::styled(
-            format!("   masse salariale : {}/h", format::money(wages)),
+            format!(
+                "   masse salariale : {}/h   nouveaux candidats dans {}",
+                format::money(wages),
+                format::duration(app.world.next_candidates_in(&app.data))
+            ),
             t.dim,
         ),
     ]))
@@ -1437,9 +1441,12 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         .collect();
     if rows.is_empty() {
         let text = if recruiting {
-            "Plus de candidats aujourd'hui : de nouveaux se présenteront demain."
+            format!(
+                "Plus de candidats pour l'instant : de nouveaux se présenteront dans {}.",
+                format::duration(app.world.next_candidates_in(&app.data))
+            )
         } else {
-            "Aucun équipier pour l'instant : Tab ouvre le recrutement. Un train ne part pas sans conducteur ; sans contrôleur, il roule avec du personnel ordinaire."
+            "Aucun équipier pour l'instant : Tab ouvre le recrutement. Un train ne part pas sans conducteur ; sans contrôleur, il roule avec du personnel ordinaire.".to_string()
         };
         Paragraph::new(Line::styled(text, t.dim))
             .wrap(Wrap { trim: true })

@@ -1250,7 +1250,7 @@ mod tests {
     #[test]
     fn a_batch_of_locomotives_shares_the_reserve_drivers() {
         let (mut world, data) = setup();
-        advance(&mut world, &data, 10.0); // tire les candidats du jour
+        advance(&mut world, &data, 10.0); // tire le premier arrivage de candidats
         world.money = 1e6;
         world.drivers_hired = 1;
         let reserve: Vec<u32> = (0..2)

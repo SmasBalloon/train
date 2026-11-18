@@ -254,12 +254,12 @@ pub struct World {
     /// Conducteurs et contrôleurs employés.
     #[serde(default)]
     pub crew: Vec<CrewMember>,
-    /// Candidats du jour au bureau de recrutement.
+    /// Candidats présents au bureau de recrutement.
     #[serde(default)]
     pub candidates: Vec<CrewMember>,
-    /// Jour pour lequel les candidats ont été tirés.
-    #[serde(default)]
-    pub candidates_day: u64,
+    /// Arrivage pour lequel les candidats ont été tirés.
+    #[serde(default, alias = "candidates_day")]
+    pub candidates_batch: u64,
     #[serde(default)]
     pub next_crew_id: u32,
     /// Conducteurs embauchés depuis la fondation (le premier est sans prime).
@@ -300,7 +300,7 @@ impl World {
             prestige: Prestige::default(),
             crew: Vec::new(),
             candidates: Vec::new(),
-            candidates_day: 0,
+            candidates_batch: 0,
             next_crew_id: 0,
             drivers_hired: 0,
             trainings: Vec::new(),
