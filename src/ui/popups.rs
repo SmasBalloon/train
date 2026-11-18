@@ -113,8 +113,30 @@ fn scroll_start(sel: usize, len: usize, height: usize) -> usize {
     }
 }
 
-/// Affiche la tranche visible d'une liste dont `sel` est la ligne choisie.
-fn render_list(buf: &mut Buffer, area: Rect, rows: Vec<Line>, sel: usize) {
+/// Affiche la tranche visible d'une liste dont `sel` est la ligne choisie,
+/// sans les lignes que cache le filtre.
+fn render_list(app: &App, buf: &mut Buffer, area: Rect, rows: Vec<Line>, sel: usize) {
+    let (rows, sel) = match app.shown() {
+        Some(shown) if app.filter_labels().is_some_and(|l| l.len() == rows.len()) => {
+            let pos = shown.iter().position(|&i| i == sel).unwrap_or(0);
+            let kept: Vec<Line> = rows
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| shown.contains(i))
+                .map(|(_, row)| row)
+                .collect();
+            (kept, pos)
+        }
+        _ => (rows, sel),
+    };
+    if rows.is_empty() {
+        Paragraph::new(Line::styled(
+            format!("Aucun résultat pour « {} ».", app.filter.trim()),
+            app.theme.dim,
+        ))
+        .render(area, buf);
+        return;
+    }
     let height = area.height.saturating_sub(1) as usize;
     let start = scroll_start(sel, rows.len(), height.max(1));
     let visible: Vec<Line> = rows.into_iter().skip(start).take(height.max(1)).collect();
@@ -122,8 +144,28 @@ fn render_list(buf: &mut Buffer, area: Rect, rows: Vec<Line>, sel: usize) {
 }
 
 pub fn footer(app: &App, buf: &mut Buffer, area: Rect, hint: &str) {
+    let filterable = app.filter_labels().is_some();
     let line = match &app.popup_msg {
         Some(msg) => Line::styled(msg.clone(), app.theme.warn),
+        None if filterable && (app.filter_typing || !app.filter.is_empty()) => {
+            let found = app.shown().map_or(0, |s| s.len());
+            let (caret, keys) = if app.filter_typing {
+                ("_", "Entrée : valider")
+            } else {
+                ("", "/ : modifier")
+            };
+            Line::from(vec![
+                Span::styled(format!("Filtre : {}{caret}", app.filter), app.theme.title),
+                Span::styled(
+                    format!(
+                        "   {found} résultat{}    {keys}    Échap : effacer le filtre",
+                        if found > 1 { "s" } else { "" }
+                    ),
+                    app.theme.dim,
+                ),
+            ])
+        }
+        None if filterable => Line::styled(format!("/ : filtrer    {hint}"), app.theme.dim),
         None => Line::styled(hint.to_string(), app.theme.dim),
     };
     Paragraph::new(line).render(area, buf);
@@ -321,7 +363,7 @@ fn draw_shop(app: &App, buf: &mut Buffer, area: Rect, sel: usize, qty: u32) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     if let Some(loco) = locos.get(sel) {
         let state = app.world.lines.get(line_id);
@@ -565,7 +607,7 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     if let Some(r) = items.get(sel) {
         Paragraph::new(research_card(app, r))
@@ -612,7 +654,7 @@ fn draw_eras(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     if let Some(era) = eras.get(sel) {
         let mut rules = vec![
@@ -719,7 +761,7 @@ fn draw_upgrades(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     if let Some(upgrade) = upgrades.get(sel) {
         let mut lines = vec![
@@ -860,7 +902,7 @@ fn draw_fuel(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     let mut lines = Vec::new();
     if !era.rules.fuel_market {
@@ -996,7 +1038,7 @@ fn draw_network(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             }
         })
         .collect();
-    render_list(buf, list, lines, sel);
+    render_list(app, buf, list, lines, sel);
 
     let mut lines = Vec::new();
     let hint = match rows.get(sel) {
@@ -1162,7 +1204,7 @@ fn draw_staff(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     let mut lines = Vec::new();
     if let Some(s) = staff.get(sel) {
@@ -1257,7 +1299,7 @@ fn draw_home(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     let mut lines = Vec::new();
     if let Some(c) = countries.get(sel) {
@@ -1401,7 +1443,7 @@ fn draw_company(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             Span::styled(format!("  {status}"), style),
         ]));
     }
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     let mut lines = Vec::new();
     if sel == 0 {
@@ -1582,7 +1624,7 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
             .wrap(Wrap { trim: true })
             .render(list, buf);
     } else {
-        render_list(buf, list, rows, sel);
+        render_list(app, buf, list, rows, sel);
     }
 
     let mut lines = Vec::new();
@@ -1730,7 +1772,7 @@ fn draw_training(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         ))
         .render(list, buf);
     } else {
-        render_list(buf, list, rows, sel);
+        render_list(app, buf, list, rows, sel);
     }
 
     let mut lines = Vec::new();
@@ -1807,7 +1849,7 @@ fn draw_training_new(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             )
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
     Paragraph::new(Line::styled(
         format!(
             "La session commencera dans {} h : d'ici là, inscris jusqu'à {} équipiers du métier.",
@@ -1887,7 +1929,7 @@ fn draw_enroll(app: &App, buf: &mut Buffer, area: Rect, session: u32, sel: usize
         ))
         .render(list, buf);
     } else {
-        render_list(buf, list, rows, sel);
+        render_list(app, buf, list, rows, sel);
     }
     let text = if s.started(app.world.clock) {
         format!("Session en cours jusqu'à {}.", when(s.end))
@@ -1975,7 +2017,7 @@ fn draw_fleet(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         ))
         .render(list, buf);
     } else {
-        render_list(buf, list, rows, sel);
+        render_list(app, buf, list, rows, sel);
     }
 
     if let Some(loco) = trains
@@ -2092,7 +2134,7 @@ fn draw_replace(app: &App, buf: &mut Buffer, area: Rect, train_id: u32, sel: usi
             ])
         })
         .collect();
-    render_list(buf, list, rows, sel);
+    render_list(app, buf, list, rows, sel);
 
     let mut lines = Vec::new();
     if let (Some(old), Some(new)) = (app.data.locomotive(&train.loco), locos.get(sel)) {
@@ -2466,7 +2508,11 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
             "réseau : concessions, lignes à construire, ligne courante",
         ),
         ("e", "époques : conditions pour passer à la suivante"),
-        ("u", "améliorations de la ligne (rails, caténaire...)"),
+        ("u", "améliorations du réseau (rails, caténaire...)"),
+        (
+            "/",
+            "dans une fenêtre à liste : filtrer par nom (Échap efface)",
+        ),
         ("c", "combustibles : stocks et cours du jour"),
         ("t", "tarifs et horaires, satisfaction des clientèles"),
         (

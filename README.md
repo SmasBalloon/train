@@ -84,6 +84,7 @@ jusqu'à la prochaine action.
 | `n`                       | réseau : concessions, lignes à construire                 |
 | `e`                       | époques : conditions pour passer à la suivante            |
 | `u`                       | améliorations du réseau entier (rails, caténaire…)       |
+| `/`                       | dans une fenêtre à liste : filtrer par nom (Échap efface) |
 | `c`                       | combustibles : stocks et cours du jour                    |
 | `t`                       | tarifs et horaires, satisfaction des clientèles           |
 | `g`                       | services : automatiser réparations, achats, horaires      |

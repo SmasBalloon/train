@@ -175,6 +175,10 @@ pub struct App {
     pub time: f64,
     /// Instant (`time`) de la dernière touche ou action de souris.
     last_input: f64,
+    /// Texte du filtre de la liste ouverte (`/` pour le saisir).
+    pub filter: String,
+    /// Vrai pendant la saisie du filtre : les touches vont au texte.
+    pub filter_typing: bool,
     size: (u16, u16),
     drag: Option<(u16, u16)>,
     paths: HashMap<String, Polyline>,
@@ -225,6 +229,8 @@ impl App {
             offline: None,
             time: 0.0,
             last_input: 0.0,
+            filter: String::new(),
+            filter_typing: false,
             size: (80, 24),
             drag: None,
             paths,
@@ -1277,6 +1283,202 @@ impl App {
         self.open(Popup::Research { sel, branch: None });
     }
 
+    /// Texte cherché par le filtre pour chaque rang de la liste de la fenêtre
+    /// ouverte ; `None` si cette fenêtre n'a pas de liste filtrable.
+    pub fn filter_labels(&self) -> Option<Vec<String>> {
+        let d = &self.data;
+        let labels = match self.popup {
+            Popup::Shop { .. } | Popup::Replace { .. } => d
+                .locomotives
+                .iter()
+                .map(|l| format!("{} {}", l.name, l.traction))
+                .collect(),
+            Popup::Research { branch, .. } => self
+                .research_items(branch)
+                .iter()
+                .map(|r| r.name.fr.clone())
+                .collect(),
+            Popup::Eras { .. } => d.eras.iter().map(|e| e.name.fr.clone()).collect(),
+            Popup::Upgrades { .. } => d.upgrades.iter().map(|u| u.name.fr.clone()).collect(),
+            Popup::Fuel { .. } => d.fuels.iter().map(|f| f.name.fr.clone()).collect(),
+            // Un pays reste visible si l'une de ses lignes correspond, et une
+            // ligne si son pays correspond.
+            Popup::Network { .. } => self
+                .network_rows()
+                .iter()
+                .map(|row| match row {
+                    NetworkRow::Country(c) => std::iter::once(c.name.fr.as_str())
+                        .chain(c.lines.iter().map(|l| l.name.as_str()))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    NetworkRow::Line(l) => format!(
+                        "{} {}",
+                        l.name,
+                        d.country_of_line(&l.id).map_or("", |c| c.name.fr.as_str())
+                    ),
+                })
+                .collect(),
+            Popup::Home { .. } => d.starting_countries().map(|c| c.name.fr.clone()).collect(),
+            Popup::Staff { .. } => d.staff.iter().map(|s| s.name.fr.clone()).collect(),
+            Popup::Company { .. } => std::iter::once("Nationaliser la compagnie".to_string())
+                .chain(d.bonuses.iter().map(|b| b.name.fr.clone()))
+                .collect(),
+            Popup::Crew { recruiting, .. } => {
+                let members = if recruiting {
+                    &self.world.candidates
+                } else {
+                    &self.world.crew
+                };
+                members
+                    .iter()
+                    .map(|m| format!("{} {}", m.name, m.role.name()))
+                    .collect()
+            }
+            Popup::Fleet { .. } => self
+                .world
+                .trains
+                .iter()
+                .map(|t| {
+                    let line = d.line(&t.line).map_or("", |l| l.name.as_str());
+                    format!("{} {line}", self.train_name(t))
+                })
+                .collect(),
+            Popup::Training { .. } => self
+                .world
+                .trainings
+                .iter()
+                .map(|s| course_label(s.role, s.skill))
+                .collect(),
+            Popup::TrainingNew { .. } => Self::courses()
+                .iter()
+                .map(|&(role, skill)| course_label(role, skill))
+                .collect(),
+            Popup::Enroll { session, .. } => self
+                .enroll_candidates(session)
+                .iter()
+                .map(|m| m.name.clone())
+                .collect(),
+            _ => return None,
+        };
+        Some(labels)
+    }
+
+    /// Rangs de la liste ouverte que le filtre laisse voir ; `None` sans filtre.
+    pub fn shown(&self) -> Option<Vec<usize>> {
+        if self.filter.trim().is_empty() {
+            return None;
+        }
+        let words: Vec<String> = fold(&self.filter)
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+        let labels = self.filter_labels()?;
+        Some(
+            labels
+                .iter()
+                .enumerate()
+                .filter(|(_, label)| {
+                    let label = fold(label);
+                    words.iter().all(|w| label.contains(w.as_str()))
+                })
+                .map(|(i, _)| i)
+                .collect(),
+        )
+    }
+
+    /// Rang choisi dans la fenêtre ouverte, quand elle en a un.
+    fn popup_sel(&mut self) -> Option<&mut usize> {
+        match &mut self.popup {
+            Popup::Shop { sel, .. }
+            | Popup::Research { sel, .. }
+            | Popup::Eras { sel }
+            | Popup::Upgrades { sel }
+            | Popup::Fuel { sel }
+            | Popup::Network { sel }
+            | Popup::Staff { sel }
+            | Popup::Company { sel, .. }
+            | Popup::Crew { sel, .. }
+            | Popup::Fleet { sel }
+            | Popup::Training { sel }
+            | Popup::TrainingNew { sel }
+            | Popup::Enroll { sel, .. }
+            | Popup::Replace { sel, .. }
+            | Popup::Home { sel } => Some(sel),
+            _ => None,
+        }
+    }
+
+    /// Ramène la sélection sur une ligne visible quand le filtre la cache.
+    fn snap_selection(&mut self) {
+        let Some(shown) = self.shown() else {
+            return;
+        };
+        if let Some(sel) = self.popup_sel()
+            && !shown.contains(sel)
+            && let Some(&first) = shown.first()
+        {
+            *sel = first;
+        }
+    }
+
+    /// Comme `move_selection`, mais en sautant les lignes cachées par le filtre.
+    fn move_sel(&self, code: KeyCode, sel: usize, count: usize) -> Option<usize> {
+        let same_list = self.filter_labels().is_some_and(|l| l.len() == count);
+        match self.shown() {
+            Some(shown) if same_list => {
+                let pos = shown.iter().position(|&i| i == sel).unwrap_or(0);
+                move_selection(code, pos, shown.len()).map(|p| shown[p])
+            }
+            _ => move_selection(code, sel, count),
+        }
+    }
+
+    /// Touches du filtre : `/` ouvre la saisie, Entrée la valide, Échap
+    /// l'efface. Renvoie vrai si la touche a été prise par le filtre.
+    fn filter_key(&mut self, code: KeyCode) -> bool {
+        if self.filter_labels().is_none() {
+            self.filter_typing = false;
+            return false;
+        }
+        if self.filter_typing {
+            match code {
+                KeyCode::Char(c) => self.filter.push(c),
+                KeyCode::Backspace => {
+                    self.filter.pop();
+                }
+                KeyCode::Enter => self.filter_typing = false,
+                KeyCode::Esc => {
+                    self.filter.clear();
+                    self.filter_typing = false;
+                }
+                // On peut parcourir la liste sans quitter la saisie.
+                KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End => return false,
+                _ => {}
+            }
+            self.snap_selection();
+            return true;
+        }
+        match code {
+            KeyCode::Char('/') => {
+                self.filter_typing = true;
+                true
+            }
+            // Un premier Échap efface le filtre, le second ferme la fenêtre.
+            KeyCode::Esc if !self.filter.is_empty() => {
+                self.filter.clear();
+                true
+            }
+            // Rien à valider quand le filtre ne laisse aucune ligne.
+            KeyCode::Enter | KeyCode::Char(' ') => self.shown().is_some_and(|s| s.is_empty()),
+            _ => false,
+        }
+    }
+
     pub fn open(&mut self, popup: Popup) {
         self.popup = popup;
         self.popup_msg = None;
@@ -1345,7 +1547,15 @@ impl App {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 // Une touche interrompt la locomotive, puis agit normalement.
                 self.transition = None;
+                let kind = std::mem::discriminant(&self.popup);
                 self.on_key(key);
+                // Le filtre ne survit pas à un changement de fenêtre.
+                if std::mem::discriminant(&self.popup) != kind {
+                    self.filter.clear();
+                    self.filter_typing = false;
+                } else {
+                    self.snap_selection();
+                }
             }
             Event::Mouse(_) if self.transition.is_some() => {}
             Event::Mouse(mouse) if self.popup == Popup::None && self.screen == Screen::Map => {
@@ -1382,6 +1592,9 @@ impl App {
             return;
         }
         let code = key.code;
+        if self.filter_key(code) {
+            return;
+        }
         let closes = matches!(code, KeyCode::Esc | KeyCode::Char('q'));
         let confirms = matches!(code, KeyCode::Enter | KeyCode::Char(' '));
         match self.popup {
@@ -1397,7 +1610,7 @@ impl App {
                     .map_or(0, |e| e.choices.len());
                 if confirms {
                     self.choose(sel);
-                } else if let Some(sel) = move_selection(code, sel, count) {
+                } else if let Some(sel) = self.move_sel(code, sel, count) {
                     self.open(Popup::Event { sel });
                 }
             }
@@ -1408,7 +1621,7 @@ impl App {
                 KeyCode::Left | KeyCode::Char('h' | '-') => self.adjust(sel, -1.0),
                 KeyCode::Right | KeyCode::Char('l' | '+' | '=') => self.adjust(sel, 1.0),
                 _ => {
-                    if let Some(sel) = move_selection(code, sel, 2) {
+                    if let Some(sel) = self.move_sel(code, sel, 2) {
                         self.open(Popup::Manage { sel });
                     }
                 }
@@ -1428,7 +1641,7 @@ impl App {
                     self.open(Popup::Shop { sel, qty });
                 } else if closes || code == KeyCode::Char('a') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.locomotives.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.locomotives.len()) {
                     self.open(Popup::Shop { sel, qty });
                 }
             }
@@ -1447,7 +1660,7 @@ impl App {
                         branch: cycle_branch(branch, forward),
                     });
                 } else if let Some(sel) =
-                    move_selection(code, sel, self.research_items(branch).len())
+                    self.move_sel(code, sel, self.research_items(branch).len())
                 {
                     self.open(Popup::Research { sel, branch });
                 }
@@ -1457,7 +1670,7 @@ impl App {
                     self.advance_era();
                 } else if closes || code == KeyCode::Char('e') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.eras.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.eras.len()) {
                     self.open(Popup::Eras { sel });
                 }
             }
@@ -1466,7 +1679,7 @@ impl App {
                     self.buy_upgrade(sel);
                 } else if closes || code == KeyCode::Char('u') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.upgrades.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.upgrades.len()) {
                     self.open(Popup::Upgrades { sel });
                 }
             }
@@ -1477,7 +1690,7 @@ impl App {
                     self.buy_fuel(sel, 10);
                 } else if closes || code == KeyCode::Char('c') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.fuels.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.fuels.len()) {
                     self.open(Popup::Fuel { sel });
                 }
             }
@@ -1486,7 +1699,7 @@ impl App {
                     self.network_action(sel);
                 } else if closes || code == KeyCode::Char('n') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.network_rows().len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.network_rows().len()) {
                     self.open(Popup::Network { sel });
                 }
             }
@@ -1502,7 +1715,7 @@ impl App {
                         .unwrap_or(0);
                     self.found_company(current);
                 } else if let Some(sel) =
-                    move_selection(code, sel, self.data.starting_countries().count())
+                    self.move_sel(code, sel, self.data.starting_countries().count())
                 {
                     self.open(Popup::Home { sel });
                 }
@@ -1512,7 +1725,7 @@ impl App {
                     self.hire(sel);
                 } else if closes || code == KeyCode::Char('g') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.staff.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.staff.len()) {
                     self.open(Popup::Staff { sel });
                 }
             }
@@ -1527,7 +1740,7 @@ impl App {
                     });
                 } else if closes || code == KeyCode::Char('o') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.data.bonuses.len() + 1) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.bonuses.len() + 1) {
                     self.open(Popup::Company {
                         sel,
                         confirm: false,
@@ -1555,7 +1768,7 @@ impl App {
                     self.open(Popup::Training { sel: 0 });
                 } else if closes || code == KeyCode::Char('s') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, count) {
+                } else if let Some(sel) = self.move_sel(code, sel, count) {
                     self.open(Popup::Crew { sel, recruiting });
                 }
             }
@@ -1585,7 +1798,7 @@ impl App {
                     }
                 } else if closes || code == KeyCode::Char('v') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.world.trains.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.world.trains.len()) {
                     self.open(Popup::Fleet { sel });
                 }
             }
@@ -1603,7 +1816,7 @@ impl App {
                     self.cancel_training(sel);
                 } else if closes || code == KeyCode::Char('i') {
                     self.popup = Popup::None;
-                } else if let Some(sel) = move_selection(code, sel, self.world.trainings.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.world.trainings.len()) {
                     self.open(Popup::Training { sel });
                 }
             }
@@ -1612,7 +1825,7 @@ impl App {
                     self.schedule_training(sel);
                 } else if closes {
                     self.open(Popup::Training { sel: 0 });
-                } else if let Some(sel) = move_selection(code, sel, Self::courses().len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, Self::courses().len()) {
                     self.open(Popup::TrainingNew { sel });
                 }
             }
@@ -1632,7 +1845,7 @@ impl App {
                 } else if confirms {
                     self.toggle_enrollment(session, sel);
                 } else if let Some(sel) =
-                    move_selection(code, sel, self.enroll_candidates(session).len())
+                    self.move_sel(code, sel, self.enroll_candidates(session).len())
                 {
                     self.open(Popup::Enroll { session, sel });
                 }
@@ -1644,7 +1857,7 @@ impl App {
                     self.replace(train, fleet, sel);
                 } else if closes || code == KeyCode::Char('r') {
                     self.open(Popup::Fleet { sel: fleet });
-                } else if let Some(sel) = move_selection(code, sel, self.data.locomotives.len()) {
+                } else if let Some(sel) = self.move_sel(code, sel, self.data.locomotives.len()) {
                     self.open(Popup::Replace { train, fleet, sel });
                 }
             }
@@ -1820,6 +2033,33 @@ fn cycle_branch(current: Option<Branch>, forward: bool) -> Option<Branch> {
     let index = options.iter().position(|b| *b == current).unwrap_or(0);
     let step = if forward { 1 } else { options.len() - 1 };
     options[(index + step) % options.len()]
+}
+
+/// Métier et compétence d'une formation, pour le filtre.
+fn course_label(role: CrewRole, skill: usize) -> String {
+    format!(
+        "{} {}",
+        role.name(),
+        role.skills().get(skill).copied().unwrap_or_default()
+    )
+}
+
+/// Minuscules sans accents, pour comparer sans se soucier de la saisie.
+pub fn fold(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'à' | 'â' | 'ä' | 'á' | 'ã' | 'å' => 'a',
+            'ç' => 'c',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' | 'í' | 'ì' => 'i',
+            'ô' | 'ö' | 'ó' | 'ò' | 'õ' => 'o',
+            'ù' | 'û' | 'ü' | 'ú' => 'u',
+            'ÿ' | 'ý' => 'y',
+            'ñ' => 'n',
+            _ => c,
+        })
+        .collect()
 }
 
 fn move_selection(code: KeyCode, sel: usize, count: usize) -> Option<usize> {

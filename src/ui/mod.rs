@@ -220,6 +220,70 @@ mod tests {
     }
 
     #[test]
+    fn slash_filters_every_list() {
+        let mut app = app(false, ColorMode::Color);
+        // Dépôt : on ne garde que la Rocket.
+        press(&mut app, KeyCode::Char('a'));
+        assert!(screen(&mut app, 120, 40).contains("/ : filtrer"));
+        press(&mut app, KeyCode::Char('/'));
+        for c in "rock".chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        let text = screen(&mut app, 120, 40);
+        assert!(
+            text.contains("Filtre : rock") && text.contains("1 résultat"),
+            "{text}"
+        );
+        assert!(!text.contains("Crampton"));
+        let rocket = app.data.locomotives.iter().position(|l| l.name == "Rocket");
+        assert_eq!(
+            app.popup,
+            Popup::Shop {
+                sel: rocket.unwrap(),
+                qty: 1
+            }
+        );
+        // Entrée valide le filtre ; les flèches restent sur les lignes visibles.
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Down);
+        assert_eq!(
+            app.popup,
+            Popup::Shop {
+                sel: rocket.unwrap(),
+                qty: 1
+            }
+        );
+        // Premier Échap : efface le filtre ; second : ferme la fenêtre.
+        press(&mut app, KeyCode::Esc);
+        assert!(app.filter.is_empty() && screen(&mut app, 120, 40).contains("Crampton"));
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.popup, Popup::None);
+
+        // Recherche sans accents ni majuscules, et rien à valider sans résultat.
+        press(&mut app, KeyCode::Char('r'));
+        press(&mut app, KeyCode::Char('/'));
+        for c in "acier bess".chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        assert!(screen(&mut app, 120, 40).contains("Acier Bessemer"));
+        for c in "zzz".chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Enter);
+        assert!(screen(&mut app, 120, 40).contains("Aucun résultat"));
+        assert!(app.world.research_active.is_none());
+        // Le filtre disparaît avec la fenêtre.
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Char('/'));
+        press(&mut app, KeyCode::Char('x'));
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('q'));
+        assert_eq!(app.popup, Popup::None);
+        assert!(app.filter.is_empty());
+    }
+
+    #[test]
     fn thirty_minutes_without_input_cut_the_revenue() {
         let mut app = app(false, ColorMode::Color);
         app.update(29.0 * 60.0);
