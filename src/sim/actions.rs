@@ -60,6 +60,8 @@ pub enum ActionError {
     LineNotBuilt,
     /// Personne pour conduire ce train.
     NoDriver,
+    /// Nom du combustible épuisé : le train ne peut pas partir.
+    NoFuel(String),
     /// Le train est déjà tiré par cette machine.
     SameLocomotive,
     UnknownTraining,
@@ -152,6 +154,12 @@ impl fmt::Display for ActionError {
             ActionError::TrainingFull => write!(f, "Formation complète"),
             ActionError::WrongRole => write!(f, "Cette formation s'adresse à l'autre métier"),
             ActionError::AlreadyEnrolled => write!(f, "Déjà inscrit à une formation"),
+            ActionError::NoFuel(name) => {
+                write!(
+                    f,
+                    "Plus de {name} en stock : le train reste à quai (c pour en acheter)"
+                )
+            }
             ActionError::CompanyFounded => write!(
                 f,
                 "La compagnie est déjà fondée : seule une nationalisation permet de repartir ailleurs"
@@ -532,6 +540,12 @@ impl World {
         let loco = data
             .locomotive(&train.loco)
             .ok_or(ActionError::UnknownLocomotive)?;
+        if self.is_out_of_fuel(data, &loco.fuel) {
+            let name = data
+                .fuel(&loco.fuel)
+                .map_or(loco.fuel.clone(), |f| f.name.fr.to_lowercase());
+            return Err(ActionError::NoFuel(name));
+        }
         let water_left = water_wait_s(era, &modifiers, loco) - waited;
         if water_left > 0.0 {
             return Err(ActionError::TakingWater {
@@ -662,8 +676,23 @@ impl World {
             return Err(ActionError::EraNotReady);
         }
         self.pay(status.cost)?;
+        let had_market = self.era(data).rules.fuel_market;
         self.era = status.era.id.clone();
         self.era_started = self.clock;
+        // Ouverture du marché des combustibles : un premier lot offert, pour que
+        // la flotte ne reste pas à quai dès le changement d'époque.
+        if !had_market && status.era.rules.fuel_market {
+            for fuel in data.fuels.iter().filter(|f| f.stock) {
+                let used = self
+                    .trains
+                    .iter()
+                    .any(|t| data.locomotive(&t.loco).is_some_and(|l| l.fuel == fuel.id));
+                if used {
+                    let stock = self.fuel.entry(fuel.id.clone()).or_insert(0.0);
+                    *stock = stock.max(fuel.lot);
+                }
+            }
+        }
         Ok(self.era.clone())
     }
 
@@ -1335,9 +1364,30 @@ mod tests {
     }
 
     #[test]
+    fn the_fuel_market_opens_with_a_free_first_lot() {
+        let (mut world, data) = setup();
+        assert_eq!(world.fuel_stock("coal"), 0.0);
+        let steam = data.era("steam").unwrap();
+        world.passengers_carried = steam.unlock.passengers;
+        world
+            .research_done
+            .extend(steam.unlock.research.iter().cloned());
+        world.money = steam.unlock.cost + 1.0;
+        world.advance_era(&data).unwrap();
+        assert_eq!(world.era, "steam");
+        assert_eq!(world.fuel_stock("coal"), data.fuel("coal").unwrap().lot);
+        // La machine fait de l'eau, mais elle ne manque pas de charbon.
+        assert!(matches!(
+            world.dispatch(&data, 1),
+            Err(ActionError::TakingWater { .. })
+        ));
+    }
+
+    #[test]
     fn steam_engine_cannot_leave_while_taking_water() {
         let (mut world, data) = setup();
         enter(&mut world, "steam");
+        world.fuel.insert("coal".into(), 100.0);
         assert_eq!(
             world.dispatch(&data, 1),
             Err(ActionError::TakingWater { minutes: 8 })

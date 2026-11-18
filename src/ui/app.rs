@@ -445,7 +445,7 @@ impl App {
                     .map_or(fuel.clone(), |f| f.name.fr.clone());
                 self.push_log(
                     format!(
-                        "{label} : stock épuisé, livraisons d'urgence au prix fort (c pour acheter)"
+                        "{label} : stock épuisé, les trains concernés s'arrêtent en gare (c pour acheter)"
                     ),
                     LogKind::Warn,
                 );

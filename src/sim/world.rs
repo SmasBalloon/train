@@ -630,6 +630,13 @@ impl World {
         self.fuel.get(fuel).copied().unwrap_or(0.0)
     }
 
+    /// Combustible stockable épuisé : les trains qui en dépendent restent à quai.
+    pub fn is_out_of_fuel(&self, data: &GameData, fuel_id: &str) -> bool {
+        self.era(data).rules.fuel_market
+            && data.fuel(fuel_id).is_some_and(|f| f.stock)
+            && self.fuel_stock(fuel_id) <= FUEL_EMPTY
+    }
+
     pub fn satisfaction_of(&self, class: &str) -> f64 {
         self.satisfaction.get(class).copied().unwrap_or(0.5)
     }
@@ -647,6 +654,9 @@ impl World {
             / total
     }
 }
+
+/// En dessous de ce stock, un combustible est considéré comme épuisé.
+pub const FUEL_EMPTY: f64 = 1e-9;
 
 /// Heure et minute de la journée pour une valeur de l'horloge du jeu.
 pub fn hour_minute(clock: f64) -> (u32, u32) {

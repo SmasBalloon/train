@@ -49,7 +49,7 @@ pub fn notice_for(event: &SimEvent, data: &GameData) -> Option<Notice> {
                 .map_or(fuel.as_str(), |f| f.name.fr.as_str());
             Some(Notice::new(
                 "Stock épuisé",
-                format!("{name} : les trains roulent au prix fort."),
+                format!("{name} : les trains s'arrêtent en gare jusqu'au prochain achat."),
             ))
         }
         SimEvent::TrackWorn { line } => {

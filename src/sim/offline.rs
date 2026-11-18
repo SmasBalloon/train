@@ -25,7 +25,7 @@ pub struct OfflineReport {
     pub track_worn: bool,
     /// Vrai si des trains sont restés à quai faute de départs automatiques.
     pub idle_trains: bool,
-    /// Vrai si un stock de combustible s'est vidé (achats d'urgence au prix fort).
+    /// Vrai si un stock de combustible s'est vidé (les trains concernés se sont arrêtés).
     pub fuel_out: bool,
     /// Vrai si un événement historique attend une décision.
     pub event_waiting: bool,
@@ -164,10 +164,13 @@ mod tests {
             report.fuel_out,
             "une tonne de charbon ne tient pas une heure d'absence"
         );
-        assert!(
-            report.trips > 0,
-            "les trains roulent quand même, au prix fort"
-        );
+        // Sans charbon, le train finit son trajet puis reste à quai.
+        assert!(world.trains.iter().all(|t| t.is_docked()));
+        let trips = world.trips;
+        catch_up(&mut world, &data, 3600.0);
+        assert_eq!(world.trips, trips, "sans charbon, plus aucun trajet");
+        world.passengers_carried = 250;
+        let report = catch_up(&mut world, &data, 60.0);
         assert!(
             report.event_waiting,
             "le concours de Rainhill attend le retour du joueur"

@@ -431,6 +431,13 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
         })
         .unwrap_or(0.0);
     let clock = world.clock;
+    // Combustibles épuisés : les trains qui en dépendent ne partent plus.
+    let empty: Vec<String> = data
+        .fuels
+        .iter()
+        .filter(|f| world.is_out_of_fuel(data, &f.id))
+        .map(|f| f.id.clone())
+        .collect();
     let mut net = 0.0;
     let mut gross = 0.0;
     let mut carried = 0u64;
@@ -492,6 +499,7 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                 }
                 if m.auto_dispatch
                     && train.crew.has_driver
+                    && !empty.contains(&loco.fuel)
                     && train.order.is_none()
                     && waited >= water_wait_s(era, &m, loco)
                 {
@@ -553,7 +561,8 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
                             });
                         }
                         *stock -= used;
-                        // Stock vide : livraison d'urgence, au prix fort.
+                        // Stock vide en route : le train finit son trajet sur une
+                        // livraison d'urgence, au prix fort, puis reste à quai.
                         net -= (need - used) * price * b.fuel_emergency_mult;
                     } else {
                         net -= need * price;
@@ -1094,6 +1103,42 @@ mod tests {
     }
 
     #[test]
+    fn trains_stay_at_the_station_when_their_fuel_runs_out() {
+        let (mut world, data) = setup();
+        enter_era(&mut world, "steam");
+        world
+            .research_done
+            .extend(["hand_signals", "water_troughs"].map(String::from));
+        world.fuel.insert("coal".into(), 0.0);
+        world.trains[0].load.insert("commuter".into(), 40);
+        world.money = 10_000.0;
+
+        // Ni départ manuel, ni départ automatique : le train attend à quai.
+        assert_eq!(
+            world.dispatch(&data, 1),
+            Err(crate::sim::ActionError::NoFuel("charbon".into()))
+        );
+        let events = advance(&mut world, &data, 3.0 * 3600.0);
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Departed { .. })),
+            "{events:?}"
+        );
+        assert!(world.trains[0].is_docked());
+
+        // Un lot de charbon et il repart.
+        world.buy_fuel(&data, "coal", 1).unwrap();
+        let events = advance(&mut world, &data, 60.0);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Departed { .. })),
+            "{events:?}"
+        );
+    }
+
+    #[test]
     fn steam_engines_take_water_before_leaving() {
         let (mut world, data) = flat();
         enter_era(&mut world, "steam");
@@ -1117,6 +1162,7 @@ mod tests {
         world
             .research_done
             .extend(["hand_signals", "water_troughs"].map(String::from));
+        world.fuel.insert("coal".into(), 100.0);
         world.trains[0].load.insert("commuter".into(), 40);
         let events = advance(&mut world, &data, 20.0);
         assert_eq!(

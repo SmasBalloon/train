@@ -875,7 +875,7 @@ fn draw_fuel(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
             ));
             lines.push(Line::styled(
                 format!(
-                    "Si le stock tombe à zéro, les trains roulent quand même, mais chaque livraison d'urgence est payée {} plus cher.",
+                    "Si le stock tombe à zéro, les trains qui en dépendent restent à quai jusqu'au prochain achat. Ceux déjà en route finissent leur trajet sur une livraison d'urgence, payée {} plus cher.",
                     format::percent(app.data.balance.fuel_emergency_mult - 1.0)
                 ),
                 t.dim,
@@ -2419,7 +2419,7 @@ fn draw_welcome(app: &App, buf: &mut Buffer, area: Rect) {
     }
     if report.fuel_out {
         lines.push(Line::styled(
-            "Un stock de combustible s'est vidé : les trains ont roulé au prix fort (c pour en racheter).",
+            "Un stock de combustible s'est vidé : les trains concernés sont restés à quai (c pour en racheter).",
             t.warn,
         ));
     }

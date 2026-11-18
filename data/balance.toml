@@ -26,7 +26,7 @@ accel_max             = 1.0     # plafond d'adhérence, en m/s²
 base_decel            = 0.12    # freinage sans aucune recherche, en m/s²
 decel_max             = 1.2
 unit_weight_t         = 0.15    # masse ajoutée au train par place offerte
-fuel_emergency_mult   = 1.6     # surcoût d'un achat d'urgence quand le stock est vide
+fuel_emergency_mult   = 1.6     # surcoût de l'énergie d'urgence d'un train à court en route (il s'arrête ensuite)
 
 # Horaires, prix et satisfaction
 default_dwell_min     = 20.0    # arrêt prévu en gare avant le départ suivant

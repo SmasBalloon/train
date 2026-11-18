@@ -1038,6 +1038,16 @@ fn draw_train_panel(app: &App, buf: &mut Buffer, area: Rect) {
 
     let clock = app.world.clock;
     let (status, detail) = match train.state {
+        TrainState::AtStation { .. } if app.world.is_out_of_fuel(&app.data, &loco.fuel) => {
+            let fuel = app
+                .data
+                .fuel(&loco.fuel)
+                .map_or(loco.fuel.clone(), |f| f.name.fr.to_uppercase());
+            (
+                format!("À quai à {origin} {} {destination}", g.arrow),
+                format!("EN PANNE : PLUS DE {fuel} (c pour en acheter)"),
+            )
+        }
         TrainState::AtStation { .. } => {
             let (h, m) = crate::sim::hour_minute(train.sched_departure);
             let late_min = ((clock - train.sched_departure) / 60.0) as i64;

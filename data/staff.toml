@@ -29,7 +29,7 @@ cost         = 80000.0
 salary_per_h = 120.0
 role         = { kind = "auto_fuel", reserve_h = 12.0, max_price_ratio = 1.05 }
 name         = { fr = "Service des approvisionnements", en = "Supply office" }
-description  = { fr = "Des acheteurs suivent les cours et reconstituent douze heures de réserve quand le prix est raisonnable. Si le stock est presque vide, ils achètent quand même, pour éviter les livraisons d'urgence." }
+description  = { fr = "Des acheteurs suivent les cours et reconstituent douze heures de réserve quand le prix est raisonnable. Si le stock est presque vide, ils achètent quand même, pour que les trains ne restent pas à quai faute de combustible." }
 
 [[staff]]
 id           = "timetable_office"
