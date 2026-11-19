@@ -1,6 +1,6 @@
 [package]
 name = "rainhill"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 description = "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain"
 # Licence maison (non SPDX) : usage et modifications libres, en terminal uniquement.
