@@ -175,6 +175,9 @@ pub struct LineState {
 pub struct ActiveResearch {
     pub id: String,
     pub progress_s: f64,
+    /// Vrai une fois passé le risque de fausse piste (à mi-parcours).
+    #[serde(default)]
+    pub setback_checked: bool,
 }
 
 /// Ce qui survit à une nationalisation : points et bonus permanents.
@@ -276,6 +279,9 @@ pub struct World {
     /// Conducteurs embauchés depuis la fondation (le premier est sans prime).
     #[serde(default)]
     pub drivers_hired: u32,
+    /// Ingénieurs embauchés depuis la fondation (le premier est sans prime).
+    #[serde(default)]
+    pub engineers_hired: u32,
     /// Sessions de formation à venir ou en cours.
     #[serde(default)]
     pub trainings: Vec<TrainingSession>,
@@ -330,6 +336,7 @@ impl World {
             candidates_rerolls: 0,
             next_crew_id: 0,
             drivers_hired: 0,
+            engineers_hired: 0,
             trainings: Vec::new(),
             next_training_id: 0,
             home: country_id.to_string(),
@@ -513,6 +520,9 @@ impl World {
         // d'une ancienne sauvegarde retournent en réserve.
         let mut posts = BTreeSet::new();
         for member in &mut self.crew {
+            if member.role == super::crew::CrewRole::Engineer {
+                member.train = None;
+            }
             if let Some(train) = member.train
                 && !posts.insert((train, member.role == super::crew::CrewRole::Driver))
             {

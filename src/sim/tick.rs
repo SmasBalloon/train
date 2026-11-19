@@ -57,6 +57,12 @@ pub enum SimEvent {
         loco: String,
         refund: f64,
     },
+    /// Le bureau d'études est parti sur une fausse piste : `lost_h` heures de
+    /// recherche (au rythme de base) sont à refaire.
+    ResearchSetback {
+        id: String,
+        lost_h: f64,
+    },
     /// Une session de formation s'est terminée : inscrits ayant progressé, et
     /// ceux qui n'ont rien retenu.
     TrainingDone {
@@ -405,20 +411,35 @@ fn step(world: &mut World, data: &GameData, h: f64, events: &mut Vec<SimEvent>) 
         }
     }
 
-    // Recherche en cours.
-    if let Some(active) = &mut world.research_active {
-        active.progress_s += h * m.research_speed;
-        let finished = match data.research(&active.id) {
-            Some(r) => active.progress_s >= r.duration_h * 3600.0,
-            None => true,
-        };
-        if finished {
-            let id = active.id.clone();
-            world.research_active = None;
-            if data.research(&id).is_some() {
-                world.research_done.insert(id.clone());
-                events.push(SimEvent::ResearchDone { id });
+    // Recherche en cours : le bureau d'études donne le rythme.
+    if let Some(active) = world.research_active.clone() {
+        let research = data.research(&active.id);
+        let speed = m.research_speed * research.map_or(1.0, |r| world.lab_speed(data, r.branch));
+        let total = research.map_or(0.0, |r| r.duration_h * 3600.0);
+        let mut progress = active.progress_s + h * speed;
+        let mut checked = active.setback_checked;
+        // À mi-parcours, une fausse piste peut faire perdre du terrain.
+        if !checked && progress >= total * 0.5 && research.is_some() {
+            checked = true;
+            if world.roll_setback(data, &active.id) {
+                let lost = total * data.crew.engineers.setback_loss;
+                progress -= lost;
+                events.push(SimEvent::ResearchSetback {
+                    id: active.id.clone(),
+                    lost_h: lost / 3600.0,
+                });
             }
+        }
+        if research.is_none() || progress >= total {
+            world.research_active = None;
+            if research.is_some() {
+                world.research_done.insert(active.id.clone());
+                world.engineers_experience(data);
+                events.push(SimEvent::ResearchDone { id: active.id });
+            }
+        } else if let Some(a) = &mut world.research_active {
+            a.progress_s = progress;
+            a.setback_checked = checked;
         }
     }
 
@@ -1276,7 +1297,8 @@ mod tests {
         let (mut world, data) = setup();
         world.money = 10_000.0;
         world.start_research(&data, "hand_signals").unwrap();
-        let events = advance(&mut world, &data, 4.0 * 3600.0 - 20.0);
+        // 4 h de recherche, à moitié régime sans ingénieur.
+        let events = advance(&mut world, &data, 8.0 * 3600.0 - 20.0);
         assert!(!events.contains(&SimEvent::ResearchDone {
             id: "hand_signals".into()
         }));

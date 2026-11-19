@@ -421,7 +421,7 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(
-            top.contains("Signaleurs de voie") && top.trim_end().ends_with("4 min"),
+            top.contains("Signaleurs de voie") && top.trim_end().ends_with("8 min"),
             "{top}"
         );
     }
@@ -626,7 +626,7 @@ mod tests {
         );
         let text = screen(&mut app, 130, 44);
         for expected in [
-            "Recrutement 4",
+            "Recrutement 5",
             "Conducteur",
             "Contrôleur",
             "Conduite",
@@ -645,7 +645,7 @@ mod tests {
         app.world.money = 0.0;
         let driver = app.world.candidates[0].name.clone();
         press(&mut app, KeyCode::Enter);
-        assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 3));
+        assert_eq!((app.world.crew.len(), app.world.candidates.len()), (1, 4));
         // Le conducteur recruté prend d'office le train qui n'en avait pas.
         assert_eq!(app.world.crew[0].train, Some(1));
         assert!(app.world.trains[0].crew.has_driver);

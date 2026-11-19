@@ -1,8 +1,9 @@
-//! Équipages : conducteurs et contrôleurs, leurs compétences et leur carrière.
+//! Équipages : conducteurs, contrôleurs et ingénieurs du bureau d'études,
+//! leurs compétences et leur carrière.
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::{CrewRules, GameData};
+use crate::data::{Branch, CrewRules, GameData};
 
 use super::actions::ActionError;
 use super::world::World;
@@ -13,6 +14,8 @@ pub enum CrewRole {
     Driver,
     /// Contrôleur (chef de train).
     Conductor,
+    /// Ingénieur du bureau d'études : fait avancer les recherches.
+    Engineer,
 }
 
 impl CrewRole {
@@ -20,6 +23,7 @@ impl CrewRole {
         match self {
             CrewRole::Driver => "Conducteur",
             CrewRole::Conductor => "Contrôleur",
+            CrewRole::Engineer => "Ingénieur",
         }
     }
 
@@ -28,6 +32,7 @@ impl CrewRole {
         match self {
             CrewRole::Driver => ["Conduite", "Économie", "Douceur"],
             CrewRole::Conductor => ["Accueil", "Contrôle", "Embarquement"],
+            CrewRole::Engineer => ["Méthode", "Rigueur", "Polyvalence"],
         }
     }
 }
@@ -41,8 +46,11 @@ pub struct CrewMember {
     pub skills: [f64; 3],
     /// Kilomètres parcourus en service.
     pub km: f64,
-    /// Train auquel l'équipier est affecté.
+    /// Train auquel l'équipier est affecté (jamais pour un ingénieur).
     pub train: Option<u32>,
+    /// Spécialité d'un ingénieur : la branche de recherche où il excelle.
+    #[serde(default)]
+    pub branch: Option<Branch>,
 }
 
 impl CrewMember {
@@ -50,9 +58,14 @@ impl CrewMember {
         self.skills.iter().sum::<f64>() / 3.0
     }
 
-    /// Salaire horaire à la première époque, selon la compétence.
+    /// Salaire horaire à la première époque, selon le métier et la compétence.
     pub fn base_wage(&self, rules: &CrewRules) -> f64 {
-        rules.base_wage + rules.skill_wage * self.average()
+        match self.role {
+            CrewRole::Engineer => {
+                rules.engineers.base_wage + rules.engineers.skill_wage * self.average()
+            }
+            _ => rules.base_wage + rules.skill_wage * self.average(),
+        }
     }
 }
 
@@ -152,12 +165,15 @@ impl World {
     }
 
     /// Prime à verser pour embaucher un candidat. La compagnie ne paie pas
-    /// la prime de son tout premier conducteur, pour pouvoir démarrer.
+    /// la prime de son tout premier conducteur ni de son premier ingénieur,
+    /// pour pouvoir démarrer.
     pub fn hire_fee(&self, data: &GameData, member: &CrewMember) -> f64 {
-        if member.role == CrewRole::Driver && self.drivers_hired == 0 {
-            return 0.0;
+        match member.role {
+            CrewRole::Driver if self.drivers_hired == 0 => 0.0,
+            CrewRole::Engineer if self.engineers_hired == 0 => 0.0,
+            CrewRole::Engineer => self.wage_of(data, member) * data.crew.engineers.hire_fee_hours,
+            _ => self.wage_of(data, member) * data.crew.hire_fee_hours,
         }
-        self.wage_of(data, member) * data.crew.hire_fee_hours
     }
 
     /// Secondes de jeu entre deux arrivages de candidats.
@@ -228,9 +244,29 @@ impl World {
                     skills,
                     km: 0.0,
                     train: None,
+                    branch: None,
                 }
             })
             .collect();
+        // Les ingénieurs viennent après, plus rares, et jamais au-delà de ce
+        // que permet la science de l'époque.
+        let cap = self.engineer_skill_cap(data);
+        for _ in 0..data.crew.engineers.per_batch {
+            let mut skill = || (0.05 + 0.6 * next(&mut seed).powi(2)).min(cap);
+            let skills = [skill(), skill(), skill()];
+            let branch = Branch::ALL[(next(&mut seed) * 5.0) as usize % 5];
+            let first = pick(&data.crew.names.first, &mut seed).to_string();
+            let last = pick(&data.crew.names.last, &mut seed);
+            self.candidates.push(CrewMember {
+                id: 0,
+                name: format!("{first} {last}"),
+                role: CrewRole::Engineer,
+                skills,
+                km: 0.0,
+                train: None,
+                branch: Some(branch),
+            });
+        }
     }
 
     /// Reporte sur chaque train les compétences de l'équipage qui lui est affecté.
@@ -263,19 +299,44 @@ impl World {
                     train.crew.has_driver = true;
                 }
                 CrewRole::Conductor => train.crew.conductor = member.skills,
+                CrewRole::Engineer => {}
             }
         }
     }
 
-    /// Prix d'une formation dans une compétence, ou `None` si elle est déjà parfaite.
+    /// Plus haut niveau qu'un équipier de ce métier peut atteindre aujourd'hui.
+    pub fn skill_cap(&self, data: &GameData, role: CrewRole) -> f64 {
+        match role {
+            CrewRole::Engineer => self.engineer_skill_cap(data),
+            _ => 1.0,
+        }
+    }
+
+    /// Plafond des compétences d'un ingénieur à l'époque actuelle.
+    pub fn engineer_skill_cap(&self, data: &GameData) -> f64 {
+        data.crew
+            .engineers
+            .skill_cap
+            .get(&self.era)
+            .copied()
+            .unwrap_or(1.0)
+    }
+
+    /// Prix d'une formation dans une compétence, ou `None` si elle est déjà au
+    /// plafond (la perfection, ou la limite de l'époque pour un ingénieur).
     pub fn training_cost(&self, data: &GameData, member: &CrewMember, skill: usize) -> Option<f64> {
         let level = *member.skills.get(skill)?;
-        if level >= 1.0 - 1e-9 {
+        if level >= self.skill_cap(data, member.role) - 1e-9 {
             return None;
         }
         let rules = &data.crew;
+        let mult = match member.role {
+            CrewRole::Engineer => rules.engineers.training_cost_mult,
+            _ => 1.0,
+        };
         Some(
             rules.training_cost
+                * mult
                 * (1.0 + rules.training_cost_growth * level * level)
                 * self.wage_scale(data),
         )
@@ -309,13 +370,17 @@ impl World {
         }
         let rules = &data.crew;
         let start = self.clock + rules.training_delay_h * 3600.0;
+        let duration = match role {
+            CrewRole::Engineer => rules.engineers.training_duration_h,
+            _ => rules.training_duration_h,
+        };
         self.next_training_id += 1;
         self.trainings.push(TrainingSession {
             id: self.next_training_id,
             role,
             skill,
             start,
-            end: start + rules.training_duration_h * 3600.0,
+            end: start + duration * 3600.0,
             enrolled: Vec::new(),
         });
         Ok(self.next_training_id)
@@ -435,6 +500,7 @@ impl World {
             .partition(|t| clock >= t.end);
         self.trainings = pending;
         let rules = &data.crew;
+        let engineer_cap = self.engineer_skill_cap(data);
         let mut results = Vec::new();
         for session in done {
             let mut outcome = Vec::new();
@@ -445,8 +511,13 @@ impl World {
                 let passed = next(&mut seed) >= rules.training_fail_chance;
                 if let Some(m) = self.crew.iter_mut().find(|m| m.id == e.crew) {
                     if passed {
-                        m.skills[session.skill] =
-                            (m.skills[session.skill] + rules.training_gain).min(1.0);
+                        let cap = match m.role {
+                            CrewRole::Engineer => engineer_cap,
+                            _ => 1.0,
+                        };
+                        let level = &mut m.skills[session.skill];
+                        // Un plafond franchi d'avance (époque passée) n'est pas repris.
+                        *level = (*level + rules.training_gain).min(cap.max(*level));
                     }
                     outcome.push((e.crew, passed));
                 }
@@ -470,6 +541,7 @@ impl World {
             skills: [0.0; 3],
             km: 0.0,
             train: Some(train),
+            branch: None,
         });
         self.sync_crew();
         self.next_crew_id
@@ -509,14 +581,21 @@ impl World {
         prefer: Option<u32>,
     ) -> Result<u32, ActionError> {
         let candidate = self.candidates.get(index).ok_or(ActionError::UnknownCrew)?;
+        if candidate.role == CrewRole::Engineer
+            && self.engineers().count() >= self.lab_seats(data) as usize
+        {
+            return Err(ActionError::LabFull);
+        }
         let fee = self.hire_fee(data, candidate);
         if self.money < fee {
             return Err(ActionError::NotEnoughMoney { needed: fee });
         }
         self.money -= fee;
         let mut member = self.candidates.remove(index);
-        if member.role == CrewRole::Driver {
-            self.drivers_hired += 1;
+        match member.role {
+            CrewRole::Driver => self.drivers_hired += 1,
+            CrewRole::Engineer => self.engineers_hired += 1,
+            CrewRole::Conductor => {}
         }
         self.next_crew_id += 1;
         member.id = self.next_crew_id;
@@ -556,6 +635,9 @@ impl World {
             .crew_member(crew_id)
             .ok_or(ActionError::UnknownCrew)?
             .role;
+        if role == CrewRole::Engineer && train.is_some() {
+            return Err(ActionError::EngineerOnTrain);
+        }
         if let Some(train_id) = train {
             if self.train(train_id).is_none() {
                 return Err(ActionError::UnknownTrain);
@@ -607,6 +689,98 @@ impl World {
         self.crew.iter().map(|m| self.wage_of(data, m)).sum()
     }
 
+    // ----- Bureau d'études -----
+
+    /// Ingénieurs employés.
+    pub fn engineers(&self) -> impl Iterator<Item = &CrewMember> {
+        self.crew.iter().filter(|m| m.role == CrewRole::Engineer)
+    }
+
+    /// Ingénieurs au bureau en ce moment (ceux en formation sont absents).
+    pub fn engineers_present(&self) -> impl Iterator<Item = &CrewMember> {
+        self.engineers().filter(|m| !self.in_training(m.id))
+    }
+
+    /// Places au bureau d'études à l'époque actuelle.
+    pub fn lab_seats(&self, data: &GameData) -> u32 {
+        data.crew
+            .engineers
+            .seats
+            .get(&self.era)
+            .copied()
+            .unwrap_or(1)
+    }
+
+    /// Apport d'un ingénieur à une recherche de la branche `branch`.
+    pub fn engineer_contribution(data: &GameData, member: &CrewMember, branch: Branch) -> f64 {
+        let r = &data.crew.engineers;
+        let [method, _, versatility] = member.skills;
+        let fit = if member.branch == Some(branch) {
+            1.0
+        } else {
+            r.off_branch_min + (1.0 - r.off_branch_min) * versatility
+        };
+        r.max_contribution * (r.beginner_share + (1.0 - r.beginner_share) * method) * fit
+    }
+
+    /// Vitesse que le bureau donne à une recherche de cette branche (avant le
+    /// bonus de prestige). Les apports sont rangés du plus fort au plus faible
+    /// et comptent de moins en moins : embaucher en masse rapporte peu.
+    pub fn lab_speed(&self, data: &GameData, branch: Branch) -> f64 {
+        let r = &data.crew.engineers;
+        let mut apports: Vec<f64> = self
+            .engineers_present()
+            .map(|m| Self::engineer_contribution(data, m, branch))
+            .collect();
+        if apports.is_empty() {
+            return r.no_engineer_speed;
+        }
+        apports.sort_by(|a, b| b.total_cmp(a));
+        let mut weight = 1.0;
+        let mut total = 1.0;
+        for a in apports {
+            total += a * weight;
+            weight *= r.team_decay;
+        }
+        total
+    }
+
+    /// Risque qu'une recherche parte sur une fausse piste, selon la rigueur
+    /// moyenne des ingénieurs présents.
+    pub fn setback_chance(&self, data: &GameData) -> f64 {
+        let r = &data.crew.engineers;
+        let rigor: Vec<f64> = self.engineers_present().map(|m| m.skills[1]).collect();
+        let mean = if rigor.is_empty() {
+            0.0
+        } else {
+            rigor.iter().sum::<f64>() / rigor.len() as f64
+        };
+        (r.setback_chance - r.setback_rigor_cut * mean).max(0.0)
+    }
+
+    /// Tirage (déterministe pour une partie donnée) : la recherche `id`
+    /// part-elle sur une fausse piste ?
+    pub(crate) fn roll_setback(&self, data: &GameData, id: &str) -> bool {
+        let mut seed = id.bytes().fold(0xCBF2_9CE4_8422_2325u64, |h, b| {
+            (h ^ b as u64).wrapping_mul(0x0100_0000_01B3)
+        }) ^ ((self.prestige.resets as u64) << 48)
+            ^ (self.research_done.len() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        next(&mut seed) < self.setback_chance(data)
+    }
+
+    /// Une recherche terminée fait un peu progresser les ingénieurs présents,
+    /// sans dépasser le plafond de l'époque.
+    pub(crate) fn engineers_experience(&mut self, data: &GameData) {
+        let cap = self.engineer_skill_cap(data);
+        let gain = data.crew.engineers.xp_per_research;
+        let present: Vec<u32> = self.engineers_present().map(|m| m.id).collect();
+        for m in self.crew.iter_mut().filter(|m| present.contains(&m.id)) {
+            for skill in &mut m.skills {
+                *skill = (*skill + gain).min(cap.max(*skill));
+            }
+        }
+    }
+
     /// Fait progresser l'équipage d'un train qui vient de parcourir `km`.
     pub(crate) fn train_crew_experience(&mut self, rules: &CrewRules, train: u32, km: f64) {
         for member in self.crew.iter_mut().filter(|m| m.train == Some(train)) {
@@ -646,6 +820,7 @@ mod tests {
             skills,
             km: 0.0,
             train: None,
+            branch: None,
         });
         id
     }
@@ -654,7 +829,7 @@ mod tests {
     fn candidates_are_the_same_for_a_given_batch_and_change_the_next() {
         let (world, data) = setup();
         let (other, _) = setup();
-        assert_eq!(world.candidates.len(), 4);
+        assert_eq!(world.candidates.len(), 5);
         assert_eq!(world.candidates, other.candidates, "tirage déterministe");
         let drivers = world
             .candidates
@@ -662,16 +837,21 @@ mod tests {
             .filter(|c| c.role == CrewRole::Driver)
             .count();
         assert_eq!(drivers, 2);
-        for c in &world.candidates {
+        for c in &world.candidates[..4] {
             assert!(c.skills.iter().all(|s| (0.1..=1.0).contains(s)), "{c:?}");
-            assert!(c.name.contains(' ') && c.train.is_none());
+            assert!(c.name.contains(' ') && c.train.is_none() && c.branch.is_none());
         }
+        // Le dernier est un ingénieur, avec une spécialité, plafonné par l'époque.
+        let engineer = &world.candidates[4];
+        assert_eq!(engineer.role, CrewRole::Engineer);
+        assert!(engineer.branch.is_some());
+        assert!(engineer.skills.iter().all(|s| (0.05..=0.4).contains(s)));
         // Un arrivage toutes les 5 minutes réelles.
         let period = 5.0 * 60.0 * data.balance.time_scale;
         let mut later = world.clone();
         advance(&mut later, &data, period);
         assert_ne!(later.candidates, world.candidates);
-        assert_eq!(later.candidates.len(), 4);
+        assert_eq!(later.candidates.len(), 5);
     }
 
     #[test]
@@ -684,7 +864,7 @@ mod tests {
         assert_eq!(world.candidates_reroll_cost(&data), 200.0);
         assert_eq!(world.reroll_candidates(&data), Ok(200.0));
         assert_eq!(world.money, 800.0);
-        assert_eq!(world.candidates.len(), 4);
+        assert_eq!(world.candidates.len(), 5);
         assert_ne!(world.candidates, before);
         assert!((world.next_candidates_in(&data) - 5.0 * 60.0).abs() < 1e-6);
         // Les candidats restent jusqu'au prochain arrivage, compté depuis le paiement.
@@ -699,8 +879,8 @@ mod tests {
     fn hiring_costs_a_fee_and_better_people_cost_more() {
         let (mut world, data) = setup();
         world.drivers_hired = 1;
-        let fees: Vec<f64> = world
-            .candidates
+        // Conducteurs et contrôleurs seulement (les ingénieurs ont leur barème).
+        let fees: Vec<f64> = world.candidates[..4]
             .iter()
             .map(|c| world.hire_fee(&data, c))
             .collect();
@@ -722,7 +902,7 @@ mod tests {
         assert!((world.money - (10_000.0 - fees[best])).abs() < 1e-9);
         assert_eq!(
             (world.candidates.len(), world.crew.len()),
-            (3, 2),
+            (4, 2),
             "fondateur + recrue"
         );
         assert_eq!(world.crew_member(id).unwrap().name, name);
@@ -1074,5 +1254,120 @@ mod tests {
         assert!(!world.in_training(driver));
         assert!(world.trains[0].crew.has_driver);
         assert_eq!(world.crew_member(driver).unwrap().train, Some(1));
+    }
+
+    fn engineer(world: &mut World, branch: Branch, skills: [f64; 3]) -> u32 {
+        let id = member(world, CrewRole::Engineer, skills);
+        world.crew.iter_mut().find(|m| m.id == id).unwrap().branch = Some(branch);
+        id
+    }
+
+    #[test]
+    fn the_lab_runs_at_half_speed_without_engineers_and_tops_out_below_x2_5() {
+        let (mut world, data) = setup();
+        let traction = Branch::Traction;
+        assert_eq!(world.lab_speed(&data, traction), 0.5);
+        // Un débutant : 1 + 0,45 × 0,2.
+        engineer(&mut world, traction, [0.0; 3]);
+        assert!((world.lab_speed(&data, traction) - 1.09).abs() < 1e-9);
+        world.crew.retain(|m| m.role != CrewRole::Engineer);
+        // Cinq experts dans la bonne branche : rendements décroissants.
+        for _ in 0..5 {
+            engineer(&mut world, traction, [1.0; 3]);
+        }
+        let aces = world.lab_speed(&data, traction);
+        assert!((2.3..2.5).contains(&aces), "{aces}");
+        // Hors spécialité, sans polyvalence : bien moins.
+        world.crew.retain(|m| m.role != CrewRole::Engineer);
+        for _ in 0..5 {
+            engineer(&mut world, Branch::Comfort, [1.0, 1.0, 0.0]);
+        }
+        let off = world.lab_speed(&data, traction);
+        assert!(off < 1.6 && off > 1.4, "{off}");
+        assert_eq!(world.lab_speed(&data, Branch::Comfort), aces);
+    }
+
+    #[test]
+    fn hiring_engineers_first_is_free_then_the_lab_fills_up() {
+        let (mut world, data) = setup();
+        world.money = 1e9;
+        let first = world
+            .candidates
+            .iter()
+            .position(|c| c.role == CrewRole::Engineer)
+            .unwrap();
+        assert_eq!(world.hire_fee(&data, &world.candidates[first]), 0.0);
+        let id = world.hire_crew(&data, first).unwrap();
+        assert_eq!(
+            world.assign_crew(id, Some(1)),
+            Err(ActionError::EngineerOnTrain)
+        );
+        engineer(&mut world, Branch::Braking, [0.1; 3]);
+        // Deux places chez les pionniers.
+        let period = 5.0 * 60.0 * data.balance.time_scale;
+        advance(&mut world, &data, period);
+        let next = world
+            .candidates
+            .iter()
+            .position(|c| c.role == CrewRole::Engineer)
+            .unwrap();
+        assert!(world.hire_fee(&data, &world.candidates[next]) > 0.0);
+        assert_eq!(world.hire_crew(&data, next), Err(ActionError::LabFull));
+        world.era = "steam".into();
+        assert!(world.hire_crew(&data, next).is_ok());
+    }
+
+    #[test]
+    fn engineer_training_is_dearer_longer_and_capped_by_the_era() {
+        let (mut world, data) = setup();
+        world.money = 1e9;
+        let low = engineer(&mut world, Branch::Signalling, [0.35, 0.0, 0.0]);
+        let capped = engineer(&mut world, Branch::Signalling, [0.4, 0.0, 0.0]);
+        let driver = member(&mut world, CrewRole::Driver, [0.35; 3]);
+        let cost = |w: &World, id| w.training_cost(&data, w.crew_member(id).unwrap(), 0);
+        assert!((cost(&world, low).unwrap() / cost(&world, driver).unwrap() - 3.0).abs() < 1e-9);
+        assert_eq!(cost(&world, capped), None, "plafond des pionniers : 0,4");
+        let session = world
+            .schedule_training(&data, CrewRole::Engineer, 0)
+            .unwrap();
+        let t = world.training(session).unwrap();
+        assert_eq!(t.end - t.start, 12.0 * 3600.0);
+        world.enroll(&data, session, low).unwrap();
+        // En formation, il quitte le bureau.
+        advance(&mut world, &data, 6.0 * 3600.0 + 10.0);
+        assert_eq!(world.engineers_present().count(), 1);
+        advance(&mut world, &data, 12.0 * 3600.0);
+        let level = world.crew_member(low).unwrap().skills[0];
+        assert!(
+            level == 0.35 || (level - 0.4).abs() < 1e-9,
+            "gain rogné : {level}"
+        );
+    }
+
+    #[test]
+    fn rigor_cuts_setbacks_and_finished_research_teaches_a_little() {
+        let (mut world, data) = setup();
+        assert!((world.setback_chance(&data) - 0.15).abs() < 1e-9);
+        let id = engineer(&mut world, Branch::Signalling, [0.2, 1.0, 0.2]);
+        assert!((world.setback_chance(&data) - 0.03).abs() < 1e-9);
+        // Sur beaucoup de tirages, le taux suit la probabilité.
+        world.crew.retain(|m| m.id != id);
+        let hits = (0..2000)
+            .filter(|i| {
+                world.research_done.insert(format!("x{i}"));
+                world.roll_setback(&data, "hand_signals")
+            })
+            .count();
+        let rate = hits as f64 / 2000.0;
+        assert!((0.11..0.19).contains(&rate), "{rate}");
+
+        let (mut world, data) = setup();
+        let id = engineer(&mut world, Branch::Signalling, [0.2, 0.2, 0.2]);
+        world.money = 1e6;
+        world.start_research(&data, "hand_signals").unwrap();
+        advance(&mut world, &data, 24.0 * 3600.0);
+        assert!(world.research_done.contains("hand_signals"));
+        let skills = world.crew_member(id).unwrap().skills;
+        assert!(skills.iter().all(|s| (s - 0.21).abs() < 1e-9), "{skills:?}");
     }
 }

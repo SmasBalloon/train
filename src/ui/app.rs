@@ -438,6 +438,19 @@ impl App {
                     .map_or(id.clone(), |r| r.name.fr.clone());
                 self.push_log(format!("Recherche terminée : {label}"), LogKind::Good);
             }
+            SimEvent::ResearchSetback { id, lost_h } => {
+                let label = self
+                    .data
+                    .research(&id)
+                    .map_or(id.clone(), |r| r.name.fr.clone());
+                self.push_log(
+                    format!(
+                        "{label} : le bureau d'études est parti sur une fausse piste, {} h de travail à refaire",
+                        format::quantity(lost_h)
+                    ),
+                    LogKind::Warn,
+                );
+            }
             SimEvent::TrackWorn { line } => {
                 let label = self
                     .data
@@ -833,6 +846,24 @@ impl App {
         }
     }
 
+    fn buy_all_upgrades(&mut self) {
+        let (bought, cost) = self.world.buy_all_upgrades(&self.data);
+        if bought.is_empty() {
+            self.popup_msg = Some("Aucune amélioration disponible et payable".into());
+            return;
+        }
+        self.popup_msg = None;
+        self.push_log(
+            format!(
+                "{} amélioration(s) installée(s) sur tout le réseau pour {} : {}",
+                bought.len(),
+                format::money(cost),
+                bought.join(", ")
+            ),
+            LogKind::Good,
+        );
+    }
+
     fn buy_fuel(&mut self, sel: usize, lots: u32) {
         let Some(fuel) = self.data.fuels.get(sel) else {
             return;
@@ -931,7 +962,7 @@ impl App {
     }
 
     /// Formations proposées : (métier, compétence) dans l'ordre affiché.
-    pub fn courses() -> [(CrewRole, usize); 6] {
+    pub fn courses() -> [(CrewRole, usize); 9] {
         [
             (CrewRole::Driver, 0),
             (CrewRole::Driver, 1),
@@ -939,6 +970,9 @@ impl App {
             (CrewRole::Conductor, 0),
             (CrewRole::Conductor, 1),
             (CrewRole::Conductor, 2),
+            (CrewRole::Engineer, 0),
+            (CrewRole::Engineer, 1),
+            (CrewRole::Engineer, 2),
         ]
     }
 
@@ -1058,6 +1092,15 @@ impl App {
                     };
                     let name = name.unwrap_or_default();
                     self.push_log(format!("{name} rejoint la compagnie"), LogKind::Good);
+                    if let Some(branch) = self.world.crew_member(id).and_then(|m| m.branch) {
+                        self.push_log(
+                            format!(
+                                "{name} entre au bureau d'études (spécialité : {})",
+                                super::popups::branch_name(branch).to_lowercase()
+                            ),
+                            LogKind::Good,
+                        );
+                    }
                     let member = self.world.crew_member(id);
                     let is_driver = member.is_some_and(|m| m.role == CrewRole::Driver);
                     let train = member
@@ -1086,6 +1129,13 @@ impl App {
             return;
         };
         let (id, name, current) = (member.id, member.name.clone(), member.train);
+        if member.role == CrewRole::Engineer {
+            self.popup_msg = Some(
+                "Un ingénieur travaille au bureau d'études : il ne s'affecte pas à un train"
+                    .to_string(),
+            );
+            return;
+        }
         let Some(train) = self.selected else {
             self.popup_msg = Some("Sélectionne d'abord un train sur la carte (Tab)".to_string());
             return;
@@ -1266,7 +1316,9 @@ impl App {
         let active = self.world.research_active.as_ref()?;
         let research = self.data.research(&active.id)?;
         let total = research.duration_h * 3600.0;
-        let speed = self.world.modifiers(&self.data).research_speed * self.data.balance.time_scale;
+        let speed = self.world.modifiers(&self.data).research_speed
+            * self.world.lab_speed(&self.data, research.branch)
+            * self.data.balance.time_scale;
         let left = (total - active.progress_s).max(0.0) / speed;
         Some((research, (active.progress_s / total).clamp(0.0, 1.0), left))
     }
@@ -1677,6 +1729,8 @@ impl App {
             Popup::Upgrades { sel } => {
                 if confirms {
                     self.buy_upgrade(sel);
+                } else if code == KeyCode::Char('a') {
+                    self.buy_all_upgrades();
                 } else if closes || code == KeyCode::Char('u') {
                     self.popup = Popup::None;
                 } else if let Some(sel) = self.move_sel(code, sel, self.data.upgrades.len()) {

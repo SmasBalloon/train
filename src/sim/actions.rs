@@ -73,6 +73,10 @@ pub enum ActionError {
     WrongRole,
     /// L'équipier est déjà inscrit à une session.
     AlreadyEnrolled,
+    /// Toutes les places du bureau d'études sont prises.
+    LabFull,
+    /// Un ingénieur travaille au bureau d'études, pas dans un train.
+    EngineerOnTrain,
     /// La compagnie a déjà choisi son pays : seule une nationalisation permet
     /// de repartir ailleurs.
     CompanyFounded,
@@ -132,7 +136,15 @@ impl fmt::Display for ActionError {
             ActionError::NotEnoughPoints { needed } => {
                 write!(f, "Pas assez de points de prestige (il en faut {needed})")
             }
-            ActionError::MaxLevel => write!(f, "Niveau maximal atteint"),
+            ActionError::MaxLevel => write!(f, "Niveau maximal atteint (pour cette époque)"),
+            ActionError::LabFull => write!(
+                f,
+                "Le bureau d'études est plein : il s'agrandit à l'époque suivante"
+            ),
+            ActionError::EngineerOnTrain => write!(
+                f,
+                "Un ingénieur travaille au bureau d'études, pas dans un train"
+            ),
             ActionError::NotConnected => {
                 write!(
                     f,
@@ -622,6 +634,7 @@ impl World {
         self.research_active = Some(ActiveResearch {
             id: id.to_string(),
             progress_s: 0.0,
+            setback_checked: false,
         });
         Ok(())
     }
@@ -996,6 +1009,28 @@ impl World {
             state.upgrades.insert(upgrade_id.to_string());
         }
         Ok(cost)
+    }
+
+    /// Pose d'un coup toutes les améliorations disponibles et payables, dans
+    /// l'ordre du catalogue, en repassant tant qu'une pose en débloque une
+    /// autre (rails en acier puis voie lourde…). Renvoie les noms posés et la
+    /// dépense totale.
+    pub fn buy_all_upgrades(&mut self, data: &GameData) -> (Vec<String>, f64) {
+        let mut bought = Vec::new();
+        let mut spent = 0.0;
+        loop {
+            let mut progress = false;
+            for upgrade in &data.upgrades {
+                if let Ok(cost) = self.buy_upgrade(data, &upgrade.id) {
+                    bought.push(upgrade.name.fr.clone());
+                    spent += cost;
+                    progress = true;
+                }
+            }
+            if !progress {
+                return (bought, spent);
+            }
+        }
     }
 
     // ----- Combustibles -----
@@ -1582,6 +1617,27 @@ mod tests {
     }
 
     #[test]
+    fn buy_all_upgrades_follows_the_chain_and_the_purse() {
+        let (mut world, data) = setup();
+        enter(&mut world, "apogee");
+        world
+            .research_done
+            .extend(["bessemer_steel", "welded_rails"].map(String::from));
+        // Rien à payer : rien n'est posé.
+        world.money = 0.0;
+        assert_eq!(world.buy_all_upgrades(&data), (vec![], 0.0));
+        // Assez d'argent : la voie lourde suit les rails en acier dans la foulée.
+        world.money = 1e9;
+        let (bought, spent) = world.buy_all_upgrades(&data);
+        assert!(spent > 0.0);
+        assert!(world.lines[LINE].upgrades.contains("steel_rails"));
+        assert!(world.lines[LINE].upgrades.contains("heavy_track"));
+        assert_eq!(bought.len(), world.lines[LINE].upgrades.len());
+        // Une seconde fois : tout est déjà posé.
+        assert_eq!(world.buy_all_upgrades(&data), (vec![], 0.0));
+    }
+
+    #[test]
     fn upgrades_cover_the_whole_network() {
         let (mut world, data) = setup();
         world.money = 1e9;
@@ -1957,7 +2013,8 @@ mod tests {
 
         world.money = 1000.0;
         world.start_research(&data, "hand_signals").unwrap();
-        advance(&mut world, &data, 4.0 * 3600.0 / 1.2 + 10.0);
+        // Sans ingénieur, le bureau tourne à moitié régime.
+        advance(&mut world, &data, 8.0 * 3600.0 / 1.2 + 10.0);
         assert!(
             world.research_done.contains("hand_signals"),
             "la recherche va 20 % plus vite"
@@ -2071,6 +2128,7 @@ mod tests {
         world.research_active = Some(ActiveResearch {
             id: "gone".into(),
             progress_s: 1.0,
+            setback_checked: false,
         });
         world.stations.clear();
         world.era = "bronze_age".into();

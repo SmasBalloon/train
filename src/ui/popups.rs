@@ -540,13 +540,42 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
     let list_height = (items.len() as u16 + 1)
         .min(inner.height.saturating_sub(4) / 2)
         .max(1);
-    let [tabs, list, detail, foot] = Layout::vertical([
+    let [tabs, lab, list, detail, foot] = Layout::vertical([
+        Constraint::Length(1),
         Constraint::Length(2),
         Constraint::Length(list_height),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
     .areas(inner);
+    let prestige = app.world.modifiers(&app.data).research_speed;
+    let speed = |b: Branch| prestige * app.world.lab_speed(&app.data, b);
+
+    // Le bureau : ingénieurs présents et rythme de chaque branche.
+    let present = app.world.engineers_present().count();
+    let lab_text = if app.world.engineers().count() == 0 {
+        format!(
+            "Aucun ingénieur : la recherche avance à x{}. Embauches-en au recrutement (s, puis Tab) : le premier est sans prime.",
+            format::dec1(speed(Branch::Traction))
+        )
+    } else {
+        let paces: Vec<String> = Branch::ALL
+            .iter()
+            .map(|b| format!("{} x{}", branch_name(*b), format::dec1(speed(*b))))
+            .collect();
+        format!(
+            "Ingénieurs : {present} au bureau sur {} ({} places)  {}  fausse piste {}  {}  {}",
+            app.world.engineers().count(),
+            app.world.lab_seats(&app.data),
+            g.bullet,
+            format::percent(app.world.setback_chance(&app.data)),
+            g.bullet,
+            paces.join("  ")
+        )
+    };
+    Paragraph::new(Line::styled(lab_text, t.dim))
+        .wrap(Wrap { trim: true })
+        .render(lab, buf);
 
     // Onglets de branche.
     let mut spans = Vec::new();
@@ -594,12 +623,12 @@ fn draw_research(app: &App, buf: &mut Buffer, area: Rect, sel: usize, branch: Op
                 (g.bullet, "disponible".to_string(), t.good)
             };
             let text = format!(
-                "{} {mark} {:<41} {:<13} {:>10} {:>7}  ",
+                "{} {mark} {:<41} {:<13} {:>10} {:>8}  ",
                 cursor(app, i == sel),
                 r.name.fr,
                 branch_name(r.branch),
                 format::money(r.cost),
-                format::duration(r.duration_h * 3600.0 / time_scale),
+                format::duration(r.duration_h * 3600.0 / time_scale / speed(r.branch)),
             );
             Line::from(vec![
                 Span::styled(text, row_style(app, i == sel)),
@@ -838,7 +867,7 @@ fn draw_upgrades(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         app,
         buf,
         foot,
-        "Entrée : installer    haut/bas : choisir    Échap : fermer",
+        "Entrée : installer    a : tout installer    haut/bas : choisir    Échap : fermer",
     );
 }
 
@@ -1528,7 +1557,7 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         app,
         buf,
         area,
-        "Équipages : conducteurs et contrôleurs",
+        "Équipages : conducteurs, contrôleurs et ingénieurs",
         104,
         30,
     );
@@ -1578,9 +1607,10 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
                     _ => "prime offerte".to_string(),
                 }
             } else {
-                let post = match m.train.and_then(|id| app.world.train(id)) {
-                    Some(train) => app.train_name(train),
-                    None => "en réserve".to_string(),
+                let post = match (m.branch, m.train.and_then(|id| app.world.train(id))) {
+                    (Some(branch), _) => format!("bureau d'études, {}", branch_name(branch)),
+                    (None, Some(train)) => app.train_name(train),
+                    (None, None) => "en réserve".to_string(),
                 };
                 if app.world.in_training(m.id) {
                     format!("{post} (en formation)")
@@ -1598,9 +1628,13 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
                 stars(app, m.skills[2]),
                 format::money(app.world.wage_of(&app.data, m)),
             );
+            let post = match m.branch {
+                Some(branch) if recruiting => format!("{post}  ({})", branch_name(branch)),
+                _ => post,
+            };
             let style = if recruiting && app.world.money < app.world.hire_fee(&app.data, m) {
                 t.dim
-            } else if m.train.is_some() || recruiting {
+            } else if m.train.is_some() || m.branch.is_some() || recruiting {
                 t.good
             } else {
                 t.dim
@@ -1642,16 +1676,41 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
                 (e.control_revenue, "+", "de recettes"),
                 (e.boarding_speed, "+", "de vitesse d'embarquement"),
             ],
+            crate::sim::CrewRole::Engineer => {
+                let n = &rules.engineers;
+                [
+                    (
+                        n.max_contribution * (1.0 - n.beginner_share),
+                        "+",
+                        "de vitesse de recherche dans sa spécialité",
+                    ),
+                    (n.setback_rigor_cut, "-", "de risque de fausse piste"),
+                    (
+                        1.0 - n.off_branch_min,
+                        "+",
+                        "d'efficacité hors de sa spécialité",
+                    ),
+                ]
+            }
         };
         lines.push(Line::styled(
-            format!(
-                "{} {} {} {} {} km en service",
-                m.name,
-                g.dash,
-                m.role.name().to_lowercase(),
-                g.bullet,
-                format::int(m.km)
-            ),
+            match m.branch {
+                Some(branch) => format!(
+                    "{} {} ingénieur {} {}",
+                    m.name,
+                    g.dash,
+                    g.bullet,
+                    branch_name(branch).to_lowercase()
+                ),
+                None => format!(
+                    "{} {} {} {} {} km en service",
+                    m.name,
+                    g.dash,
+                    m.role.name().to_lowercase(),
+                    g.bullet,
+                    format::int(m.km)
+                ),
+            },
             t.title,
         ));
         for ((skill, name), (max, sign, what)) in m.skills.iter().zip(m.role.skills()).zip(effects)
@@ -1671,9 +1730,14 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
         if !recruiting {
             let status = match app.world.enrolled_in(m.id) {
                 Some(session) if session.started(app.world.clock) => format!(
-                    "En formation ({}) jusqu'à {} : absent de son train.",
+                    "En formation ({}) jusqu'à {} : {}.",
                     session.skill_name().to_lowercase(),
-                    when(session.end)
+                    when(session.end),
+                    if m.branch.is_some() {
+                        "absent du bureau d'études"
+                    } else {
+                        "absent de son train"
+                    }
                 ),
                 Some(session) => format!(
                     "Inscrit à la formation {} qui commence {}.",
@@ -1685,10 +1749,31 @@ fn draw_crew(app: &App, buf: &mut Buffer, area: Rect, sel: usize, recruiting: bo
             lines.push(Line::styled(status, t.text));
         }
         lines.push(Line::raw(""));
-        lines.push(Line::styled(
-            "Les compétences progressent avec les kilomètres parcourus en service, ou avec une formation ; un équipier en réserve est payé mais n'apprend rien. Un train ne part pas sans un conducteur affecté.",
-            t.dim,
-        ));
+        if let Some(branch) = m.branch {
+            let cap = app.world.engineer_skill_cap(&app.data);
+            lines.push(Line::styled(
+                format!(
+                    "Spécialité : {}. Apport à une recherche de sa branche : +{} de vitesse (moins s'il n'est pas le meilleur du bureau). Compétences plafonnées à {} à cette époque.",
+                    branch_name(branch).to_lowercase(),
+                    format::percent(crate::sim::World::engineer_contribution(&app.data, m, branch)),
+                    format::percent(cap)
+                ),
+                t.text,
+            ));
+            lines.push(Line::styled(
+                format!(
+                    "Bureau d'études : {}/{} places. Les ingénieurs progressent un peu à chaque recherche terminée, surtout par la formation.",
+                    app.world.engineers().count(),
+                    app.world.lab_seats(&app.data)
+                ),
+                t.dim,
+            ));
+        } else {
+            lines.push(Line::styled(
+                "Les compétences progressent avec les kilomètres parcourus en service, ou avec une formation ; un équipier en réserve est payé mais n'apprend rien. Un train ne part pas sans un conducteur affecté.",
+                t.dim,
+            ));
+        }
         if !recruiting {
             let target = app
                 .selected
@@ -1804,8 +1889,9 @@ fn draw_training(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
     lines.push(Line::raw(""));
     lines.push(Line::styled(
         format!(
-            "Une session dure {} h et accueille {} équipiers au plus. Chacun gagne +{} dans la compétence travaillée, sauf malchance ({} de risque de ne rien retenir). Les inscrits sont absents pendant la session : un conducteur en formation laisse son train à quai.",
+            "Une session dure {} h ({} h pour les ingénieurs, trois fois plus chère) et accueille {} équipiers au plus. Chacun gagne +{} dans la compétence travaillée, sauf malchance ({} de risque de ne rien retenir). Les inscrits sont absents pendant la session : un conducteur en formation laisse son train à quai, un ingénieur quitte le bureau d'études.",
             format::quantity(rules.training_duration_h),
+            format::quantity(rules.engineers.training_duration_h),
             rules.training_seats,
             format::percent(rules.training_gain),
             format::percent(rules.training_fail_chance),
@@ -1832,7 +1918,7 @@ fn draw_training_new(app: &App, buf: &mut Buffer, area: Rect, sel: usize) {
         area,
         "Programmer une formation",
         courses.len(),
-        (80, 18),
+        (80, 26),
     );
     let rows: Vec<Line> = courses
         .iter()
@@ -2517,7 +2603,7 @@ fn draw_help(app: &App, buf: &mut Buffer, area: Rect) {
         ("t", "tarifs et horaires, satisfaction des clientèles"),
         (
             "s",
-            "équipages : recrutement, affectation au train sélectionné",
+            "équipages et ingénieurs : recrutement, affectation au train sélectionné",
         ),
         (
             "i",

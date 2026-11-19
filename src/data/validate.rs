@@ -412,6 +412,41 @@ impl GameData {
         }
         ratio("crew : effects.economy_fuel", e.economy_fuel)?;
         ratio("crew : effects.care_wear", e.care_wear)?;
+        let n = &c.engineers;
+        for (name, v) in [
+            ("base_wage", n.base_wage),
+            ("skill_wage", n.skill_wage),
+            ("hire_fee_hours", n.hire_fee_hours),
+            ("training_cost_mult", n.training_cost_mult),
+            ("max_contribution", n.max_contribution),
+            ("setback_rigor_cut", n.setback_rigor_cut),
+        ] {
+            non_negative(&format!("crew : engineers.{name}"), v)?;
+        }
+        positive(
+            "crew : engineers.training_duration_h",
+            n.training_duration_h,
+        )?;
+        positive("crew : engineers.no_engineer_speed", n.no_engineer_speed)?;
+        for (name, v) in [
+            ("beginner_share", n.beginner_share),
+            ("team_decay", n.team_decay),
+            ("off_branch_min", n.off_branch_min),
+            ("setback_chance", n.setback_chance),
+            ("setback_loss", n.setback_loss),
+            ("xp_per_research", n.xp_per_research),
+        ] {
+            ratio(&format!("crew : engineers.{name}"), v)?;
+        }
+        for era in &self.eras {
+            match (n.seats.get(&era.id), n.skill_cap.get(&era.id)) {
+                (Some(&seats), Some(&cap)) if seats > 0 && cap > 0.0 && cap <= 1.0 => {}
+                _ => bail!(
+                    "crew : engineers.seats et engineers.skill_cap doivent donner, pour l'époque {}, au moins une place et un plafond entre 0 (exclu) et 1",
+                    era.id
+                ),
+            }
+        }
         if c.names.first.is_empty() || c.names.last.is_empty() {
             bail!("crew : il faut au moins un prénom et un nom dans [names]");
         }

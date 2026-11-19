@@ -71,6 +71,7 @@ pub fn catch_up(world: &mut World, data: &GameData, away_s: f64) -> OfflineRepor
                 SimEvent::TrackWorn { .. } => report.track_worn = true,
                 SimEvent::FuelOut { .. } => report.fuel_out = true,
                 SimEvent::EventReady { .. }
+                | SimEvent::ResearchSetback { .. }
                 | SimEvent::Departed { .. }
                 | SimEvent::Repaired { .. }
                 | SimEvent::FuelBought { .. }
@@ -146,7 +147,7 @@ mod tests {
         let (mut world, data) = setup();
         world.money = 1000.0;
         world.start_research(&data, "hand_signals").unwrap();
-        let report = catch_up(&mut world, &data, 1000.0);
+        let report = catch_up(&mut world, &data, 2000.0);
         assert_eq!(report.research_done, vec!["hand_signals".to_string()]);
         assert!(world.research_done.contains("hand_signals"));
     }

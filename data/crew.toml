@@ -26,6 +26,52 @@ training_fail_chance  = 0.10   # risque de ne rien retenir
 training_delay_h      = 6.0    # délai entre la programmation et le début, en heures de jeu
 training_duration_h   = 8.0    # durée d'une session, en heures de jeu
 
+# Ingénieurs du bureau d'études : ils font avancer les recherches. Chacun a une
+# spécialité (une branche de l'arbre) et trois compétences : méthode (vitesse),
+# rigueur (moins de fausses pistes), polyvalence (hors de sa spécialité).
+#
+# Vitesse de recherche (avant le bonus de prestige) :
+#   aucun ingénieur présent : no_engineer_speed
+#   sinon : 1 + Σ apport × team_decay^rang (du meilleur au moins bon)
+#   apport = max_contribution × (beginner_share + (1 − beginner_share) × méthode)
+#            × (1 dans sa branche, sinon off_branch_min + (1 − off_branch_min) × polyvalence)
+# Un ingénieur en formation est absent du bureau. Le premier est embauché sans prime.
+[engineers]
+per_batch          = 1      # ingénieurs ajoutés à chaque arrivage de candidats
+base_wage          = 6.0    # salaire horaire d'un débutant, première époque
+skill_wage         = 18.0   # supplément horaire pour un ingénieur parfait
+hire_fee_hours     = 48.0   # prime d'embauche, en heures de salaire
+training_cost_mult = 3.0    # formations trois fois plus chères que pour les équipages
+training_duration_h = 12.0  # et plus longues
+no_engineer_speed  = 0.5    # vitesse de recherche sans aucun ingénieur au bureau
+max_contribution   = 0.45   # apport d'un ingénieur parfait dans sa spécialité
+beginner_share     = 0.2    # part de cet apport qu'a déjà un ingénieur sans méthode
+team_decay         = 0.75   # chaque ingénieur suivant compte un quart de moins
+off_branch_min     = 0.4    # efficacité hors spécialité, sans polyvalence
+setback_chance     = 0.15   # risque de fausse piste à mi-parcours, sans rigueur
+setback_rigor_cut  = 0.12   # risque retiré par une rigueur moyenne parfaite
+setback_loss       = 0.20   # part de la durée totale perdue sur une fausse piste
+xp_per_research    = 0.01   # progression de chaque présent à chaque recherche terminée
+
+# Places au bureau d'études, par époque.
+[engineers.seats]
+pioneers   = 2
+steam      = 3
+apogee     = 4
+modern     = 5
+high_speed = 6
+future     = 6
+
+# Plafond des compétences d'un ingénieur, par époque : on ne forme pas un génie
+# avant que la science ne le permette.
+[engineers.skill_cap]
+pioneers   = 0.4
+steam      = 0.6
+apogee     = 0.75
+modern     = 0.9
+high_speed = 1.0
+future     = 1.0
+
 # Effet d'une compétence au maximum (un équipier à moitié compétent en donne la moitié).
 [effects]
 driving_accel   = 0.30   # conduite : accélération et freinage, donc temps de parcours

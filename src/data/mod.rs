@@ -11,8 +11,8 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 /// Fichiers de données, dans l'ordre de chargement, avec leur contenu embarqué.
 pub const FILES: [(&str, &str); 13] = [
@@ -190,7 +190,7 @@ pub struct Locomotive {
     pub history: Localized,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Branch {
     Traction,
@@ -324,6 +324,31 @@ pub struct CrewNames {
     pub last: Vec<String>,
 }
 
+/// Ingénieurs du bureau d'études (voir `crew.toml`, section `[engineers]`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineerRules {
+    pub per_batch: u32,
+    pub base_wage: f64,
+    pub skill_wage: f64,
+    pub hire_fee_hours: f64,
+    pub training_cost_mult: f64,
+    pub training_duration_h: f64,
+    pub no_engineer_speed: f64,
+    pub max_contribution: f64,
+    pub beginner_share: f64,
+    pub team_decay: f64,
+    pub off_branch_min: f64,
+    pub setback_chance: f64,
+    pub setback_rigor_cut: f64,
+    pub setback_loss: f64,
+    pub xp_per_research: f64,
+    /// Places au bureau, par identifiant d'époque.
+    pub seats: BTreeMap<String, u32>,
+    /// Plafond des compétences, par identifiant d'époque.
+    pub skill_cap: BTreeMap<String, f64>,
+}
+
 /// Règles des équipages : recrutement, salaires, progression, effets.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -346,6 +371,7 @@ pub struct CrewRules {
     pub training_delay_h: f64,
     pub training_duration_h: f64,
     pub effects: CrewEffects,
+    pub engineers: EngineerRules,
     pub names: CrewNames,
 }
 
