@@ -2,29 +2,29 @@
 class Rainhill < Formula
   desc "Jeu incrémental de réseau ferroviaire dans le terminal, de 1825 à demain"
   homepage "https://github.com/SmasBalloon/train"
-  version "1.1.1"
+  version "1.1.2"
   # Licence maison : usage et modifications libres, en terminal uniquement.
   license :cannot_represent
 
   on_macos do
     on_arm do
-      url "https://github.com/SmasBalloon/train/releases/download/v1.1.1/rail-v1.1.1-aarch64-apple-darwin.tar.gz"
-      sha256 "b50bb7b1020fd20a3b0d2a3660ef5c1a3d2d86f5c2de370e832188b375f8a2b2"
+      url "https://github.com/SmasBalloon/train/releases/download/v1.1.2/rail-v1.1.2-aarch64-apple-darwin.tar.gz"
+      sha256 "3369024000a32701961455c824057bad927fe69759f3c527a03f76b8c4012dc7"
     end
     on_intel do
-      url "https://github.com/SmasBalloon/train/releases/download/v1.1.1/rail-v1.1.1-x86_64-apple-darwin.tar.gz"
-      sha256 "0becd2bce44deba595d2a6b6911af523b67f8e9275c18bdcf885c2ae2510c80b"
+      url "https://github.com/SmasBalloon/train/releases/download/v1.1.2/rail-v1.1.2-x86_64-apple-darwin.tar.gz"
+      sha256 "7c4c7d06ab354dafcf63b94e8f863fdb4e967ac05cb662f4934546c17fbc60be"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/SmasBalloon/train/releases/download/v1.1.1/rail-v1.1.1-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "5b53fa92eae0ef8c5bb0fbec1b95479b96518f5a932c47befc9c4dc113fb3113"
+      url "https://github.com/SmasBalloon/train/releases/download/v1.1.2/rail-v1.1.2-aarch64-unknown-linux-gnu.tar.gz"
+      sha256 "55845d7e061e84de8a2f82a2a8426196516550c10c881e155a386771e0593973"
     end
     on_intel do
-      url "https://github.com/SmasBalloon/train/releases/download/v1.1.1/rail-v1.1.1-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "dcb0e8b3f4e497774d3b9607e862340a8762071f212954b3c422b4d60d41fe2d"
+      url "https://github.com/SmasBalloon/train/releases/download/v1.1.2/rail-v1.1.2-x86_64-unknown-linux-gnu.tar.gz"
+      sha256 "f457254d04b67483866bb5b5889214c860ae9ca69855e990e1f0b44b03839e2b"
     end
   end
 
